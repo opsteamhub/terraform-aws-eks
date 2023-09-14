@@ -632,7 +632,7 @@ variable "eks_config" {
                           kms_key_override_policy_documents = optional(set(string))
                           kms_key_aliases                   = optional(set(string))
                         }
-                      )
+                      ), {}
                     )
                     resources = optional(set(string), ["secrets"])
                   }
