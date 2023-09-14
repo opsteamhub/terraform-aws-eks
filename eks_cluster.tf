@@ -5,10 +5,6 @@ resource "random_integer" "eks-id" {
   for_each    = var.eks_config
   min = 100000
   max = 999999
-  #lifecycle {
-  #  create_before_destroy      = local.test
-  #  prevent_destroy            = local.test
-  #}
 }
 
 locals {
@@ -273,7 +269,6 @@ resource "aws_eks_cluster" "eks_cp" {
       dynamic "provider" {
         for_each = toset([encryption_config.value["provider"]])
         content {
-          #key_arn =  provider.value["key_arn"]
           key_arn = coalesce(
             try(
               provider.value["key_arn"],
