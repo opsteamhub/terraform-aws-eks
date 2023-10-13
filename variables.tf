@@ -426,7 +426,7 @@ variable "eks_config" {
                             interface_type               = optional(string)
                             ipv4_prefix_count            = optional(string)
                             ipv4_prefixes                = optional(string)
-                            ipv6_addresses               = optional(string)
+                            ipv6_addresses               = optional(set(string))
                             ipv6_address_count           = optional(string)
                             ipv6_prefix_count            = optional(string)
                             ipv6_prefixes                = optional(string)
