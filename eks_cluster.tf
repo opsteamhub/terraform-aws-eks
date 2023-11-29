@@ -161,7 +161,11 @@ data "aws_iam_policy_document" "eks-cp_assume_role_policy" {
   }
 
 }
-
+resource "time_static" "eks-timestamp" { 
+  for_each = { for k, v in var.eks_config:
+      k => v
+    }
+}
 
 #
 # The EKS Control Plane's IAM Role.
@@ -171,7 +175,7 @@ resource "aws_iam_role" "eks_cp_iamrole" {
     k => v if v["control_plane"]["iam_role"]["create"] == true  
   }
   
-  name_prefix = format("%s@", local.cluster_name[each.key])
+  name = format("eks-cp-%s@%s", local.cluster_name[each.key], time_static.eks-timestamp[each.key].unix)
 
   path        = each.value["control_plane"]["iam_role"]["path"]
   description = each.value["control_plane"]["iam_role"]["description"]
