@@ -342,7 +342,7 @@ resource "aws_eks_cluster" "eks_cp" {
     each.value["control_plane"]["iam_role"]["role_arn"],
     aws_iam_role.eks_cp_iamrole[each.key].arn,
   )
-  
+  version = each.value["control_plane"]["version"]  
   #
   # EKS CP network setting.
   #

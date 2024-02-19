@@ -150,7 +150,7 @@ variable "eks_config" {
                           ami_filters = [
                             {
                               name   = "name"
-                              values = ["amazon-eks-node-1.29*"]
+                              values = ["amazon-eks-node-1.27*"]
                             },
                             {
                               name   = "root-device-type"
