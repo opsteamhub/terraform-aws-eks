@@ -1,4 +1,4 @@
-# AWS EKS Cluster
+# AWS EKS CLUSTER
 
 Módulo Terraform para criação e gerenciamento de clusters Amazon EKS (Elastic Kubernetes Service) com configuração avançada de node groups, addons e segurança.
 
