@@ -150,7 +150,7 @@ variable "eks_config" {
                           ami_filters = [
                             {
                               name   = "name"
-                              values = ["amazon-eks-node-1.27*"]
+                              values = ["amazon-eks-node-1.32*"]
                             },
                             {
                               name   = "root-device-type"
@@ -573,7 +573,7 @@ variable "eks_config" {
                     }
                   )
                 )
-                version = optional(string, "1.27")
+                version = optional(string, "1.32")
                 tags    = optional(map(string))
               }
             )
@@ -767,7 +767,7 @@ variable "eks_config" {
                   }
                 ), {}
               )
-              version = optional(string, "1.27")
+              version = optional(string, "1.32")
               tags    = optional(map(string))
             }
           ),
