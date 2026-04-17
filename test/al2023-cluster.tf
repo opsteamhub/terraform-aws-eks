@@ -90,6 +90,7 @@ module "eks_al2023" {
 
           subnet_ids = local.private_subnets_al2023
           tags       = local.common_tags_al2023
+          enable_instance_tags = true
         }
 
         ## Karpenter node group (AL2023) with taint
@@ -127,6 +128,7 @@ module "eks_al2023" {
 
           subnet_ids = local.private_subnets_al2023
           tags       = local.common_tags_al2023
+          enable_instance_tags = true
         }
       }
     }

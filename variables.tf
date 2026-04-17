@@ -574,6 +574,7 @@ variable "eks_config" {
                   )
                 )
                 version = optional(string, "1.27")
+                enable_instance_tags = optional(bool, false)
                 tags    = optional(map(string))
               }
             )

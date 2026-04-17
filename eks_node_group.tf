@@ -630,6 +630,8 @@ for_each = zipmap(
         user_data = base64encode(
           data.null_data_source.default_ng_userdata[each.key].outputs["userdata"]
         )
+      },
+      each.value["enable_instance_tags"] ? {
         tag_specifications = [
           {
             resource_type = "instance"
@@ -648,7 +650,7 @@ for_each = zipmap(
             }
           }
         ]
-      }
+      } : {}
     )
   }
 }
