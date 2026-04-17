@@ -630,6 +630,24 @@ for_each = zipmap(
         user_data = base64encode(
           data.null_data_source.default_ng_userdata[each.key].outputs["userdata"]
         )
+        tag_specifications = [
+          {
+            resource_type = "instance"
+            tags = merge(
+              var.eks_config[each.value["cluster_tf_id"]]["control_plane"]["tags"],
+              each.value["tags"],
+              {
+                "Name" = format("%s-%s", aws_eks_cluster.eks_cp[each.value["cluster_tf_id"]]["name"], each.value["node_group_name"])
+              }
+            )
+          },
+          {
+            resource_type = "volume"
+            tags = {
+              "Name" = format("%s-%s", aws_eks_cluster.eks_cp[each.value["cluster_tf_id"]]["name"], each.value["node_group_name"])
+            }
+          }
+        ]
       }
     )
   }
@@ -679,7 +697,17 @@ data "null_data_source" "default_ng_userdata" {
   )
 
   inputs = {
-    userdata = templatefile(
+    userdata = strcontains(each.value["ami_type"], "AL2023") ? templatefile(
+      "${path.module}/ng_userdata_al2023.tmpl",
+      {
+        B64_CLUSTER_CA          = aws_eks_cluster.eks_cp[each.value["cluster_tf_id"]].certificate_authority[0]["data"]
+        CLUSTER_NAME            = aws_eks_cluster.eks_cp[each.value["cluster_tf_id"]]["name"]
+        API_SERVER_URL          = aws_eks_cluster.eks_cp[each.value["cluster_tf_id"]].endpoint
+        K8S_CLUSTER_DNS_IP      = cidrhost(aws_eks_cluster.eks_cp[each.value["cluster_tf_id"]].kubernetes_network_config[0]["service_ipv4_cidr"], 10)
+        SERVICE_CIDR            = aws_eks_cluster.eks_cp[each.value["cluster_tf_id"]].kubernetes_network_config[0]["service_ipv4_cidr"]
+        NODEGROUP               = each.value["node_group_name"]
+      }
+    ) : templatefile(
       "${path.module}/ng_userdata.tmpl",
       {
         B64_CLUSTER_CA          = aws_eks_cluster.eks_cp[each.value["cluster_tf_id"]].certificate_authority[0]["data"]
@@ -828,7 +856,10 @@ resource "aws_eks_node_group" "ng" {
 
   tags = merge(
     var.eks_config[each.value["cluster_tf_id"]]["control_plane"]["tags"],
-    each.value["tags"]
+    each.value["tags"],
+    {
+      "Name" = format("%s-%s", aws_eks_cluster.eks_cp[each.value["cluster_tf_id"]]["name"], each.value["node_group_name"])
+    }
   )
 
   dynamic "taint" {
