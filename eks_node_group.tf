@@ -630,6 +630,7 @@ for_each = zipmap(
         user_data = base64encode(
           data.null_data_source.default_ng_userdata[each.key].outputs["userdata"]
         )
+        update_default_version = true
       },
       each.value["enable_instance_tags"] ? {
         tag_specifications = [
