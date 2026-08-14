@@ -622,7 +622,7 @@ for_each = zipmap(
     )
   )
 
-  source = "git@github.com:opsteamhub/terraform-aws-ec2-launch-template.git" 
+  source = "git::ssh://git@github.com/opsteamhub/terraform-aws-ec2-launch-template.git?ref=b972a60c2cbf5a6a1b716248294f0855eb6fb724"
   launch_template_config = {
     format("%s", each.value["node_group_name"]) = merge(
       each.value["launch_template"],

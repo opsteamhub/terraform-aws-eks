@@ -2,7 +2,7 @@
 # Address the KMS deploy to be used by the EKS
 #
 module "kms" {
-  source   = "git@github.com:opsteamhub/terraform-aws-kms.git"
+  source   = "git::ssh://git@github.com/opsteamhub/terraform-aws-kms.git?ref=7f556c7e35f919ce16dd7c84984f24d0c712b287"
   kms_config = { 
     for k,v in var.eks_config:
       k => {
