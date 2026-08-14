@@ -1,5 +1,17 @@
 # Local .terraform directories
 **/.terraform/*
+.terraform.lock.hcl
+
+# Terraform plan files
+*.tfplan
+tfplan
+
+# CLI configuration and credentials
+.terraformrc
+terraform.rc
+*.pem
+*.key
+kubeconfig*
 
 # .tfstate files
 *.tfstate
