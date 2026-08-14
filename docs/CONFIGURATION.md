@@ -44,9 +44,34 @@ The service network defaults to IPv4 `172.20.0.0/16`. Set `kubernetes_network_co
 
 CloudWatch logs use `/aws/eks/<cluster-name>/cluster`, retain data for 30 days, and can use an external `logs.kms_key_id`.
 
+### EKS Auto Mode
+
+`auto_mode` is opt-in. Omitting it keeps a new cluster on standard EKS compute. The smallest pure Auto Mode configuration is `auto_mode = {}` with no `node_groups`; this enables compute, Elastic Load Balancing, and block storage together and enables the AWS built-in `system` and `general-purpose` node pools.
+
+| Field | Default | Notes |
+| --- | --- | --- |
+| `enabled` | `true` | Set `false` to disable all three Auto Mode capabilities together. Disabling does not drain or migrate workloads. |
+| `node_pools` | `system`, `general-purpose` | Only the AWS built-in pool names are accepted. Use `[]` when Kubernetes manifests outside this module will create custom NodePool and NodeClass resources. |
+| `node_role_arn` | Managed role | Role used by the built-in pools. Supplying an ARN disables managed node-role creation. Omitted from the EKS API when `node_pools = []`. |
+| `node_role_name` | `<cluster>-auto-node-role` | Used only for a managed Auto Mode node role. |
+| `node_role_permissions_boundary` | `null` | Optional boundary for the managed Auto Mode node role. |
+| `node_role_additional_policy_arns` | `{}` | Named map of additional policies for the managed role. Prefer the minimal defaults unless workloads require more node permissions. |
+
+For a module-managed cluster role, enabling Auto Mode attaches `AmazonEKSClusterPolicy`, `AmazonEKSComputePolicy`, `AmazonEKSBlockStoragePolicyV2`, `AmazonEKSLoadBalancingPolicy`, and `AmazonEKSNetworkingPolicy`. The managed Auto Mode node role trusts `ec2.amazonaws.com` and receives only `AmazonEKSWorkerNodeMinimalPolicy` and `AmazonEC2ContainerRegistryPullOnly`, plus explicitly supplied additions. If either role is external, the caller owns its trust and policies.
+
+The access mode must be `API` or `API_AND_CONFIG_MAP`, and `bootstrap_self_managed_addons` must remain `false`. The Auto Mode node role ARN cannot be changed after compute is enabled without provider-planned cluster replacement; review that ARN as immutable. Auto Mode nodes use AWS-managed Bottlerocket variants and do not use this module's managed-node launch templates.
+
+Pure and hybrid usage are both supported:
+
+- With Auto Mode enabled and no `node_groups`, the module does not create standard CoreDNS, kube-proxy, VPC CNI, or Pod Identity Agent add-ons because AWS provides those core components.
+- With Auto Mode and one or more `node_groups`, the module retains the three standard add-ons so conventional nodes continue to work. Auto Mode pools and managed node groups can coexist during migration.
+- `capabilities` remain independent and can be used with either compute model.
+
+To enable Auto Mode on an existing cluster, first review the [AWS transition prerequisites and current minimum add-on builds](https://docs.aws.amazon.com/eks/latest/userguide/auto-enable-existing.html). Do not hard-code those moving version requirements into reusable configuration. See the [Auto Mode overview](https://docs.aws.amazon.com/eks/latest/userguide/automode.html), [IAM requirements](https://docs.aws.amazon.com/eks/latest/userguide/auto-learn-iam.html), and [Auto Mode example](../examples/auto-mode).
+
 ### Add-ons
 
-`addons` is a map keyed by the EKS add-on name. CoreDNS, kube-proxy, and VPC CNI are enabled by default. Leave `addon_version` unset to allow EKS to choose a compatible build; pin a tested version where release governance requires it.
+`addons` is a map keyed by the EKS add-on name. CoreDNS, kube-proxy, and VPC CNI are enabled by default for standard clusters and hybrid Auto Mode clusters. A pure Auto Mode cluster defaults to no standard add-ons. An explicit map always wins. Leave `addon_version` unset to allow EKS to choose a compatible build; pin a tested version where release governance requires it.
 
 ```hcl
 addons = {
@@ -139,7 +164,7 @@ access_entries = {
 
 IRSA is enabled by default and creates an IAM OIDC provider for every Kubernetes version. Prefer a supplied `thumbprint_list` in restricted environments where the TLS endpoint cannot be read during planning.
 
-`pod_identity_associations` creates EKS Pod Identity associations. When the map is non-empty, the module also enables `eks-pod-identity-agent` automatically.
+`pod_identity_associations` creates EKS Pod Identity associations. When the map is non-empty, the module also enables `eks-pod-identity-agent` automatically for standard or hybrid clusters. Pure Auto Mode clusters use the built-in agent and do not create the add-on.
 
 ```hcl
 pod_identity_associations = {
@@ -176,4 +201,4 @@ For EKS-managed Bottlerocket, set `ami_type` to `BOTTLEROCKET_x86_64` or `BOTTLE
 
 Supplying `launch_template.security_group_ids` replaces the security groups EKS would normally apply through the launch template. Include the required cluster-to-node connectivity and validate it in a sandbox.
 
-External cluster, node, or capability role ARNs are never modified by this module. The caller must attach all required policies and trust before EKS creation.
+External cluster, managed-node, Auto Mode node, or capability role ARNs are never modified by this module. The caller must attach all required policies and trust before EKS creation or feature enablement.

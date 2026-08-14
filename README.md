@@ -1,6 +1,6 @@
 # Terraform AWS EKS module
 
-Reusable Terraform module for Amazon EKS clusters, managed node groups, baseline add-ons, EKS Capabilities, IAM, envelope encryption, access entries, IRSA, and EKS Pod Identity.
+Reusable Terraform module for Amazon EKS clusters, EKS Auto Mode, managed node groups, baseline add-ons, EKS Capabilities, IAM, envelope encryption, access entries, IRSA, and EKS Pod Identity.
 
 The v2 contract is intentionally explicit: the caller supplies subnet IDs and provider configuration, while this module owns the EKS-specific resources. It has no Git or registry module dependencies, so a private cluster with one managed node group can be created from a small configuration.
 
@@ -13,6 +13,7 @@ The v2 contract is intentionally explicit: the caller supplies subnet IDs and pr
 - Customer-managed KMS encryption for Kubernetes secrets by default.
 - All five control-plane log types and a correctly named CloudWatch log group.
 - `coredns`, `kube-proxy`, and `vpc-cni` add-ons without stale hard-coded versions.
+- Opt-in EKS Auto Mode with AWS-recommended cluster/node IAM, built-in node pools, pure or hybrid operation, and coordinated compute, load-balancing, and block-storage settings.
 - Managed node groups on AL2023 or Bottlerocket with IMDSv2, encrypted gp3 root volumes, and node repair.
 - Cluster and node IAM roles, or caller-supplied external roles.
 - Opt-in managed ACK, Argo CD, and KRO EKS Capabilities with dedicated or external IAM roles.
@@ -65,6 +66,8 @@ module "eks" {
 
 The consumer must configure the AWS provider and pass at least two suitable subnet IDs. Do not consume an unreviewed branch or an unpinned `master` reference in production.
 
+For a pure Auto Mode cluster, replace `node_groups` with `control_plane.auto_mode = {}`. The module then creates the default `system` and `general-purpose` pools and their minimal node role, while AWS supplies core networking, DNS, load-balancing, storage, and Pod Identity components. See the [Auto Mode example](examples/auto-mode) and [configuration reference](docs/CONFIGURATION.md#eks-auto-mode).
+
 ## Secure defaults and operational choices
 
 | Behavior | Default | How to change it |
@@ -73,13 +76,14 @@ The consumer must configure the AWS provider and pass at least two suitable subn
 | Secret encryption | New rotating customer-managed KMS key | Pass `encryption_config.key_arn` or set `encryption_config.enabled = false` |
 | Control-plane logs | All five types, retained 30 days | Change `enabled_cluster_log_types` or `logs` |
 | Cluster access | `API_AND_CONFIG_MAP`, creator admin enabled | Configure `access_config` and `access_entries` |
-| Add-ons | CoreDNS, kube-proxy, VPC CNI | Override the `addons` map; omit hard-coded versions to let EKS select compatible builds |
+| Add-ons | CoreDNS, kube-proxy, VPC CNI for standard/hybrid clusters; none for pure Auto Mode | Override the `addons` map; omit hard-coded versions to let EKS select compatible builds |
+| EKS Auto Mode | Disabled | Set `auto_mode = {}`; add `node_groups` for coexistence or set `node_pools = []` for caller-managed NodePool/NodeClass resources |
 | EKS Capabilities | Disabled | Add `capabilities` entries for ACK, Argo CD, or KRO; only one of each type per cluster |
 | IRSA | Enabled | Set `irsa.enabled = false` |
 | Nodes | AL2023, IMDSv2 required, encrypted 20 GiB gp3, repair enabled | Configure each node group's `launch_template`, `ami_type`, and `node_repair_config` |
 | Desired size | Ignored after creation | Designed for Cluster Autoscaler/Karpenter ownership; change min/max in Terraform |
 
-Creating a KMS key, CloudWatch Logs, the EKS control plane, EC2 nodes, EKS Capabilities, and optional public IPv4 traffic can incur AWS charges. Each active capability is billed hourly, and resources managed through ACK, Argo CD, or KRO may add their own charges. A private endpoint also requires a network path from operators and automation to the VPC.
+Creating a KMS key, CloudWatch Logs, the EKS control plane, EC2 nodes, EKS Auto Mode, EKS Capabilities, and optional public IPv4 traffic can incur AWS charges. [Auto Mode pricing](https://aws.amazon.com/eks/pricing/) adds a management charge to its EC2, EBS, and load-balancer resources. Each active capability is billed hourly, and resources managed through ACK, Argo CD, or KRO may add their own charges. A private endpoint also requires a network path from operators and automation to the VPC.
 
 ## Documentation
 
@@ -91,13 +95,14 @@ Creating a KMS key, CloudWatch Logs, the EKS control plane, EC2 nodes, EKS Capab
 - [Complete example](examples/complete)
 - [Bottlerocket example](examples/bottlerocket)
 - [EKS Capabilities example](examples/capabilities)
+- [EKS Auto Mode example](examples/auto-mode)
 - [Repository instructions for humans and agents](AGENTS.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 
 ## Outputs
 
-The main outputs are `clusters`, `cluster_names`, `node_groups`, `launch_templates`, `capabilities`, `capability_role_arns`, `kms_key_arns`, `oidc_provider_arns`, `pod_identity_association_arns`, `cluster_role_arns`, and `node_role_arns`. Certificate authority data is exposed separately as the sensitive `cluster_certificate_authority_data` output.
+The main outputs are `clusters`, `cluster_names`, `auto_mode`, `auto_mode_node_role_arns`, `node_groups`, `launch_templates`, `capabilities`, `capability_role_arns`, `kms_key_arns`, `oidc_provider_arns`, `pod_identity_association_arns`, `cluster_role_arns`, and `node_role_arns`. Certificate authority data is exposed separately as the sensitive `cluster_certificate_authority_data` output.
 
 `eks_clusters_name` remains as a deprecated alias for `cluster_names` during the v2 transition.
 
@@ -119,6 +124,8 @@ terraform -chdir=examples/bottlerocket init -backend=false -input=false
 terraform -chdir=examples/bottlerocket validate
 terraform -chdir=examples/capabilities init -backend=false -input=false
 terraform -chdir=examples/capabilities validate
+terraform -chdir=examples/auto-mode init -backend=false -input=false
+terraform -chdir=examples/auto-mode validate
 ```
 
 Mocked tests validate contracts and the Terraform graph; they do not replace a reviewed plan and a controlled apply in a disposable AWS sandbox before a major release.

@@ -478,6 +478,369 @@ run "supports_an_external_capability_role" {
   }
 }
 
+run "creates_a_pure_auto_mode_cluster_with_managed_iam" {
+  command = apply
+
+  variables {
+    default_tags = {
+      Environment = "test"
+      Owner       = "platform"
+      Project     = "eks-module"
+    }
+
+    eks_config = {
+      auto = {
+        control_plane = {
+          name      = "auto-mode-cluster"
+          auto_mode = {}
+          vpc_config = {
+            subnet_ids = ["subnet-a", "subnet-b"]
+          }
+          irsa = {
+            enabled = false
+          }
+          pod_identity_associations = {
+            workload = {
+              namespace       = "apps"
+              service_account = "workload"
+              role_arn        = "arn:aws:iam::123456789012:role/workload"
+            }
+          }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition = (
+      aws_eks_cluster.this["auto"].compute_config[0].enabled &&
+      aws_eks_cluster.this["auto"].compute_config[0].node_pools == toset(["general-purpose", "system"]) &&
+      aws_eks_cluster.this["auto"].storage_config[0].block_storage[0].enabled &&
+      aws_eks_cluster.this["auto"].kubernetes_network_config[0].elastic_load_balancing[0].enabled
+    )
+    error_message = "Auto Mode must enable compute, built-in pools, block storage, and load balancing together."
+  }
+
+  assert {
+    condition = (
+      length(aws_iam_role.auto_mode_node) == 1 &&
+      length(aws_iam_role_policy_attachment.auto_mode_node) == 2 &&
+      length(aws_iam_role_policy_attachment.cluster) == 5 &&
+      contains(keys(aws_iam_role_policy_attachment.cluster), "auto||AmazonEKSBlockStoragePolicyV2")
+    )
+    error_message = "Managed Auto Mode roles must receive the AWS-recommended cluster and minimal node policies."
+  }
+
+  assert {
+    condition = (
+      length(aws_eks_node_group.this) == 0 &&
+      length(aws_eks_addon.this) == 0 &&
+      length(aws_eks_pod_identity_association.this) == 1
+    )
+    error_message = "Pure Auto Mode must not create standard node groups or core add-ons, including the built-in Pod Identity agent."
+  }
+}
+
+run "supports_hybrid_auto_mode_and_managed_node_groups" {
+  command = apply
+
+  variables {
+    default_tags = {
+      Environment = "test"
+      Owner       = "platform"
+      Project     = "eks-module"
+    }
+
+    eks_config = {
+      hybrid = {
+        control_plane = {
+          name      = "hybrid-cluster"
+          auto_mode = {}
+          vpc_config = {
+            subnet_ids = ["subnet-a", "subnet-b"]
+          }
+          irsa = {
+            enabled = false
+          }
+        }
+        node_groups = {
+          existing = {}
+        }
+      }
+    }
+  }
+
+  assert {
+    condition = (
+      length(aws_eks_node_group.this) == 1 &&
+      length(aws_iam_role.node) == 1 &&
+      length(aws_iam_role.auto_mode_node) == 1 &&
+      length(aws_eks_addon.this) == 3
+    )
+    error_message = "Hybrid Auto Mode must preserve managed node groups and their three standard add-ons."
+  }
+}
+
+run "supports_auto_mode_without_builtin_node_pools" {
+  command = apply
+
+  variables {
+    default_tags = {
+      Environment = "test"
+      Owner       = "platform"
+      Project     = "eks-module"
+    }
+
+    eks_config = {
+      custom_pools = {
+        control_plane = {
+          name = "custom-pools-cluster"
+          auto_mode = {
+            node_pools = []
+          }
+          vpc_config = {
+            subnet_ids = ["subnet-a", "subnet-b"]
+          }
+          irsa = {
+            enabled = false
+          }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition = (
+      aws_eks_cluster.this["custom_pools"].compute_config[0].enabled &&
+      length(aws_eks_cluster.this["custom_pools"].compute_config[0].node_pools) == 0 &&
+      aws_eks_cluster.this["custom_pools"].compute_config[0].node_role_arn == null &&
+      length(aws_iam_role.auto_mode_node) == 0
+    )
+    error_message = "Empty built-in pools must leave node-role ownership to custom NodeClasses."
+  }
+}
+
+run "supports_an_external_auto_mode_node_role" {
+  command = apply
+
+  variables {
+    default_tags = {
+      Environment = "test"
+      Owner       = "platform"
+      Project     = "eks-module"
+    }
+
+    eks_config = {
+      external_auto_role = {
+        control_plane = {
+          name = "external-auto-role-cluster"
+          auto_mode = {
+            node_role_arn = "arn:aws:iam::123456789012:role/external-auto-node-role"
+          }
+          vpc_config = {
+            subnet_ids = ["subnet-a", "subnet-b"]
+          }
+          irsa = {
+            enabled = false
+          }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition = (
+      aws_eks_cluster.this["external_auto_role"].compute_config[0].node_role_arn == "arn:aws:iam::123456789012:role/external-auto-node-role" &&
+      length(aws_iam_role.auto_mode_node) == 0 &&
+      length(aws_iam_role_policy_attachment.auto_mode_node) == 0
+    )
+    error_message = "An external Auto Mode node role must bypass managed node-role creation and attachments."
+  }
+}
+
+run "disables_all_auto_mode_capabilities_together" {
+  command = apply
+
+  variables {
+    default_tags = {
+      Environment = "test"
+      Owner       = "platform"
+      Project     = "eks-module"
+    }
+
+    eks_config = {
+      disabled_auto = {
+        control_plane = {
+          name = "disabled-auto-mode-cluster"
+          auto_mode = {
+            enabled = false
+          }
+          vpc_config = {
+            subnet_ids = ["subnet-a", "subnet-b"]
+          }
+          irsa = {
+            enabled = false
+          }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition = (
+      !aws_eks_cluster.this["disabled_auto"].compute_config[0].enabled &&
+      !aws_eks_cluster.this["disabled_auto"].storage_config[0].block_storage[0].enabled &&
+      !aws_eks_cluster.this["disabled_auto"].kubernetes_network_config[0].elastic_load_balancing[0].enabled &&
+      length(aws_iam_role.auto_mode_node) == 0 &&
+      length(aws_iam_role_policy_attachment.cluster) == 1 &&
+      length(aws_eks_addon.this) == 3
+    )
+    error_message = "Disabled Auto Mode must turn off all three capabilities and restore standard add-on defaults without Auto Mode IAM."
+  }
+}
+
+run "rejects_auto_mode_with_config_map_only_authentication" {
+  command = plan
+
+  variables {
+    default_tags = {
+      Environment = "test"
+      Owner       = "platform"
+      Project     = "eks-module"
+    }
+
+    eks_config = {
+      legacy_auth = {
+        control_plane = {
+          name      = "legacy-auth-cluster"
+          auto_mode = {}
+          access_config = {
+            authentication_mode = "CONFIG_MAP"
+          }
+          vpc_config = {
+            subnet_ids = ["subnet-a", "subnet-b"]
+          }
+        }
+      }
+    }
+  }
+
+  expect_failures = [var.eks_config]
+}
+
+run "rejects_auto_mode_with_self_managed_addon_bootstrap" {
+  command = plan
+
+  variables {
+    default_tags = {
+      Environment = "test"
+      Owner       = "platform"
+      Project     = "eks-module"
+    }
+
+    eks_config = {
+      bootstrap_conflict = {
+        control_plane = {
+          name                          = "bootstrap-conflict-cluster"
+          auto_mode                     = {}
+          bootstrap_self_managed_addons = true
+          vpc_config = {
+            subnet_ids = ["subnet-a", "subnet-b"]
+          }
+        }
+      }
+    }
+  }
+
+  expect_failures = [var.eks_config]
+}
+
+run "rejects_unknown_auto_mode_builtin_node_pools" {
+  command = plan
+
+  variables {
+    default_tags = {
+      Environment = "test"
+      Owner       = "platform"
+      Project     = "eks-module"
+    }
+
+    eks_config = {
+      invalid_pool = {
+        control_plane = {
+          name = "invalid-pool-cluster"
+          auto_mode = {
+            node_pools = ["custom"]
+          }
+          vpc_config = {
+            subnet_ids = ["subnet-a", "subnet-b"]
+          }
+        }
+      }
+    }
+  }
+
+  expect_failures = [var.eks_config]
+}
+
+run "rejects_managed_auto_mode_role_settings_with_an_external_role" {
+  command = plan
+
+  variables {
+    default_tags = {
+      Environment = "test"
+      Owner       = "platform"
+      Project     = "eks-module"
+    }
+
+    eks_config = {
+      conflicting_role = {
+        control_plane = {
+          name = "conflicting-role-cluster"
+          auto_mode = {
+            node_role_arn  = "arn:aws:iam::123456789012:role/external-auto-node-role"
+            node_role_name = "must-not-be-used"
+          }
+          vpc_config = {
+            subnet_ids = ["subnet-a", "subnet-b"]
+          }
+        }
+      }
+    }
+  }
+
+  expect_failures = [var.eks_config]
+}
+
+run "rejects_auto_mode_role_settings_when_disabled" {
+  command = plan
+
+  variables {
+    default_tags = {
+      Environment = "test"
+      Owner       = "platform"
+      Project     = "eks-module"
+    }
+
+    eks_config = {
+      disabled_role = {
+        control_plane = {
+          name = "disabled-role-cluster"
+          auto_mode = {
+            enabled        = false
+            node_role_name = "unused-role"
+          }
+          vpc_config = {
+            subnet_ids = ["subnet-a", "subnet-b"]
+          }
+        }
+      }
+    }
+  }
+
+  expect_failures = [var.eks_config]
+}
+
 run "rejects_duplicate_capability_types" {
   command = plan
 

@@ -101,3 +101,9 @@ jobs:
 
       - name: Validate capabilities example
         run: terraform -chdir=examples/capabilities validate
+
+      - name: Initialize Auto Mode example
+        run: terraform -chdir=examples/auto-mode init -backend=false -input=false
+
+      - name: Validate Auto Mode example
+        run: terraform -chdir=examples/auto-mode validate

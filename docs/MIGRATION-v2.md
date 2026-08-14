@@ -24,7 +24,8 @@ Version 2 is a breaking redesign. Do not point a live state at v2 and apply imme
 | `taint` list | `taints` map with stable keys. |
 | External launch-template module and AMI filters | Built-in launch template; use EKS-managed AL2023 by default or pass an explicit `image_id` and bootstrap `user_data`. |
 | Version-gated OIDC provider | `irsa.enabled`, available for every supported version. |
-| One `eks_clusters_name` output | Structured cluster, node, IAM, KMS, OIDC, Pod Identity, capability, and launch-template outputs. The old output name remains as an alias. |
+| No EKS Auto Mode contract | Optional `control_plane.auto_mode` with pure/hybrid operation, managed or external node IAM, and structured outputs. |
+| One `eks_clusters_name` output | Structured cluster, Auto Mode, node, IAM, KMS, OIDC, Pod Identity, capability, and launch-template outputs. The old output name remains as an alias. |
 
 `default_tags` is new and mandatory with `Environment`, `Project`, and `Owner`.
 
@@ -64,7 +65,21 @@ These are examples, not a script. Inspect `terraform state list` because v1 opti
 4. Move/import state addresses one resource class at a time.
 5. Run `terraform plan -refresh-only`, then a normal saved plan.
 6. Treat any EKS control-plane replacement as a migration error until deliberately approved. Node-group replacement may also disrupt workloads and must respect PodDisruptionBudgets and capacity.
-7. Enable modern EKS features such as Access API, Pod Identity, managed add-ons, a customer-managed KMS key, or EKS Capabilities in separate reviewed changes.
+7. Enable modern EKS features such as Access API, Pod Identity, managed add-ons, a customer-managed KMS key, EKS Auto Mode, or EKS Capabilities in separate reviewed changes.
+
+## Enabling Auto Mode on an existing v2 cluster
+
+Auto Mode is an operational migration, not only a Terraform field change:
+
+1. Inventory the current cluster role, access mode, node groups or other compute, add-ons, PodDisruptionBudgets, storage classes, load balancers, and workload placement constraints.
+2. Review the [current AWS prerequisites and minimum transition add-on builds](https://docs.aws.amazon.com/eks/latest/userguide/auto-enable-existing.html). Do not assume the versions recorded in an older plan or document are still current.
+3. Keep `authentication_mode` on `API` or `API_AND_CONFIG_MAP` and `bootstrap_self_managed_addons = false`. If `role_arn` supplies an external cluster role, attach the Auto Mode cluster policies and `sts:TagSession` trust before enabling the feature; this module cannot modify that role.
+4. Add `auto_mode = {}` while retaining existing `node_groups` for the first hybrid plan. The module then preserves CoreDNS, kube-proxy, and VPC CNI. If existing compute is outside this module, supply an explicit `addons` map matching current ownership so the first Auto Mode change does not also remove add-ons.
+5. Review a saved plan for all three capability flags, the resolved Auto Mode node role ARN, the five cluster-role attachments for a managed role, and the absence of control-plane replacement. The node role ARN becomes immutable after compute is enabled; the AWS provider can force cluster replacement if it changes later.
+6. Validate node provisioning, networking, load balancing, EBS, Pod Identity, DNS, observability, disruption budgets, and rollback in a disposable AWS sandbox.
+7. Migrate workloads to Auto Mode pools deliberately. Drain and remove managed node groups or standard add-ons only in later changes after their consumers are gone. Auto Mode pools and managed node groups can coexist.
+
+To enable Auto Mode without the built-in pools, set `node_pools = []`; this module then omits the Auto Mode node role and the caller must create custom Kubernetes NodePool and NodeClass resources, including their IAM design. To disable Auto Mode, first migrate workloads away, then set `enabled = false`; removing capacity before workloads are safe is not a rollback strategy.
 
 ## Rollback
 

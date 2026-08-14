@@ -27,4 +27,4 @@ Execute todos os comandos de [AGENTS.md](AGENTS.md). Mocks validam o contrato e 
 
 ## Pull request
 
-O PR deve explicar comportamento, compatibilidade, segurança, custo, testes, impacto no state e rollback. Inclua o resultado de um plan de sandbox quando nomes, rede, IAM, KMS, add-ons, versões ou node groups puderem mudar. Não publique tag/release antes de aprovação e merge.
+O PR deve explicar comportamento, compatibilidade, segurança, custo, testes, impacto no state e rollback. Inclua o resultado de um plan de sandbox quando nomes, rede, IAM, KMS, add-ons, Auto Mode, versões ou node groups puderem mudar. Não publique tag/release antes de aprovação e merge.

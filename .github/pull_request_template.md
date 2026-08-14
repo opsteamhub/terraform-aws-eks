@@ -15,7 +15,7 @@
 - [ ] `terraform fmt -check -recursive`
 - [ ] `terraform validate`
 - [ ] `terraform test -test-directory=testing`
-- [ ] Basic and complete examples validate
+- [ ] All examples validate
 - [ ] TFLint passes
 - [ ] Trivy has no HIGH/CRITICAL failures
 - [ ] Agent configuration schema validates

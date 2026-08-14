@@ -32,21 +32,35 @@ locals {
     )
   }
 
+  auto_mode_cluster_policy_arns = {
+    AmazonEKSComputePolicy        = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEKSComputePolicy"
+    AmazonEKSBlockStoragePolicyV2 = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEKSBlockStoragePolicyV2"
+    AmazonEKSLoadBalancingPolicy  = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEKSLoadBalancingPolicy"
+    AmazonEKSNetworkingPolicy     = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEKSNetworkingPolicy"
+  }
+
   cluster_role_policy_attachments = merge({}, [
     for cluster_key, cluster in local.clusters : cluster.control_plane.role_arn == null ? merge(
-      {
-        "${cluster_key}||AmazonEKSClusterPolicy" = {
-          cluster_key = cluster_key
-          policy_arn  = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEKSClusterPolicy"
-        }
-      },
       {
         for name, policy_arn in cluster.control_plane.role_additional_policy_arns :
         "${cluster_key}||${name}" => {
           cluster_key = cluster_key
           policy_arn  = policy_arn
         }
-      }
+      },
+      {
+        "${cluster_key}||AmazonEKSClusterPolicy" = {
+          cluster_key = cluster_key
+          policy_arn  = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEKSClusterPolicy"
+        }
+      },
+      try(cluster.control_plane.auto_mode.enabled, false) ? {
+        for name, policy_arn in local.auto_mode_cluster_policy_arns :
+        "${cluster_key}||${name}" => {
+          cluster_key = cluster_key
+          policy_arn  = policy_arn
+        }
+      } : {}
     ) : {}
   ]...)
 }
@@ -55,6 +69,85 @@ resource "aws_iam_role_policy_attachment" "cluster" {
   for_each = local.cluster_role_policy_attachments
 
   role       = aws_iam_role.cluster[each.value.cluster_key].name
+  policy_arn = each.value.policy_arn
+}
+
+data "aws_iam_policy_document" "auto_mode_node_assume_role" {
+  for_each = local.managed_auto_mode_node_role_clusters
+
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["ec2.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "auto_mode_node" {
+  for_each = data.aws_iam_policy_document.auto_mode_node_assume_role
+
+  name = coalesce(
+    local.clusters[each.key].control_plane.auto_mode.node_role_name,
+    "${local.clusters[each.key].control_plane.name}-auto-node-role"
+  )
+  assume_role_policy   = each.value.json
+  permissions_boundary = local.clusters[each.key].control_plane.auto_mode.node_role_permissions_boundary
+  tags = merge(
+    local.cluster_tags[each.key],
+    {
+      Name = coalesce(
+        local.clusters[each.key].control_plane.auto_mode.node_role_name,
+        "${local.clusters[each.key].control_plane.name}-auto-node-role"
+      )
+    }
+  )
+}
+
+locals {
+  auto_mode_node_role_clusters = {
+    for key, cluster in local.enabled_auto_mode_clusters : key => cluster
+    if length(cluster.control_plane.auto_mode.node_pools) > 0
+  }
+
+  auto_mode_node_role_arns = {
+    for key, cluster in local.auto_mode_node_role_clusters : key => coalesce(
+      cluster.control_plane.auto_mode.node_role_arn,
+      try(aws_iam_role.auto_mode_node[key].arn, null)
+    )
+  }
+
+  default_auto_mode_node_policy_arns = {
+    AmazonEKSWorkerNodeMinimalPolicy   = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEKSWorkerNodeMinimalPolicy"
+    AmazonEC2ContainerRegistryPullOnly = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly"
+  }
+
+  auto_mode_node_role_policy_attachments = merge({}, [
+    for cluster_key, cluster in local.managed_auto_mode_node_role_clusters : merge(
+      {
+        for name, policy_arn in cluster.control_plane.auto_mode.node_role_additional_policy_arns :
+        "${cluster_key}||${name}" => {
+          cluster_key = cluster_key
+          policy_arn  = policy_arn
+        }
+      },
+      {
+        for name, policy_arn in local.default_auto_mode_node_policy_arns :
+        "${cluster_key}||${name}" => {
+          cluster_key = cluster_key
+          policy_arn  = policy_arn
+        }
+      }
+    )
+  ]...)
+}
+
+resource "aws_iam_role_policy_attachment" "auto_mode_node" {
+  for_each = local.auto_mode_node_role_policy_attachments
+
+  role       = aws_iam_role.auto_mode_node[each.value.cluster_key].name
   policy_arn = each.value.policy_arn
 }
 

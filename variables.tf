@@ -40,6 +40,15 @@ variable "eks_config" {
         bootstrap_cluster_creator_admin_permissions = optional(bool, true)
       }), {})
 
+      auto_mode = optional(object({
+        enabled                          = optional(bool, true)
+        node_pools                       = optional(set(string), ["general-purpose", "system"])
+        node_role_arn                    = optional(string)
+        node_role_name                   = optional(string)
+        node_role_permissions_boundary   = optional(string)
+        node_role_additional_policy_arns = optional(map(string), {})
+      }))
+
       kubernetes_network_config = optional(object({
         ip_family         = optional(string, "ipv4")
         service_ipv4_cidr = optional(string, "172.20.0.0/16")
@@ -79,11 +88,7 @@ variable "eks_config" {
         resolve_conflicts_on_update = optional(string, "OVERWRITE")
         service_account_role_arn    = optional(string)
         tags                        = optional(map(string), {})
-        })), {
-        coredns    = {}
-        kube-proxy = {}
-        vpc-cni    = {}
-      })
+      })))
 
       capabilities = optional(map(object({
         name                      = optional(string)
@@ -295,6 +300,86 @@ variable "eks_config" {
       cluster.control_plane.access_config.authentication_mode != "CONFIG_MAP" || length(cluster.control_plane.access_entries) == 0
     ])
     error_message = "access_entries require authentication_mode API or API_AND_CONFIG_MAP."
+  }
+
+  validation {
+    condition = alltrue([
+      for cluster in values(var.eks_config) :
+      !try(cluster.control_plane.auto_mode.enabled, false) ||
+      contains(["API", "API_AND_CONFIG_MAP"], cluster.control_plane.access_config.authentication_mode)
+    ])
+    error_message = "EKS Auto Mode requires authentication_mode API or API_AND_CONFIG_MAP."
+  }
+
+  validation {
+    condition = alltrue([
+      for cluster in values(var.eks_config) :
+      !try(cluster.control_plane.auto_mode.enabled, false) || !cluster.control_plane.bootstrap_self_managed_addons
+    ])
+    error_message = "EKS Auto Mode requires bootstrap_self_managed_addons to be false."
+  }
+
+  validation {
+    condition = alltrue([
+      for cluster in values(var.eks_config) : alltrue([
+        for node_pool in try(cluster.control_plane.auto_mode.node_pools, toset([])) :
+        contains(["general-purpose", "system"], node_pool)
+      ])
+    ])
+    error_message = "auto_mode.node_pools can contain only the built-in general-purpose and system pools; create custom NodePool resources outside this module."
+  }
+
+  validation {
+    condition = alltrue([
+      for cluster in values(var.eks_config) :
+      try(cluster.control_plane.auto_mode.node_role_arn, null) == null || (
+        try(cluster.control_plane.auto_mode.node_role_name, null) == null &&
+        try(cluster.control_plane.auto_mode.node_role_permissions_boundary, null) == null &&
+        length(try(cluster.control_plane.auto_mode.node_role_additional_policy_arns, {})) == 0
+      )
+    ])
+    error_message = "Managed Auto Mode node-role settings must be omitted when auto_mode.node_role_arn is supplied."
+  }
+
+  validation {
+    condition = alltrue([
+      for cluster in values(var.eks_config) :
+      try(cluster.control_plane.auto_mode.enabled, true) || (
+        try(cluster.control_plane.auto_mode.node_role_arn, null) == null &&
+        try(cluster.control_plane.auto_mode.node_role_name, null) == null &&
+        try(cluster.control_plane.auto_mode.node_role_permissions_boundary, null) == null &&
+        length(try(cluster.control_plane.auto_mode.node_role_additional_policy_arns, {})) == 0
+      )
+    ])
+    error_message = "Auto Mode node-role settings must be omitted when auto_mode.enabled is false."
+  }
+
+  validation {
+    condition = alltrue([
+      for cluster in values(var.eks_config) :
+      !try(cluster.control_plane.auto_mode.enabled, false) ||
+      length(try(cluster.control_plane.auto_mode.node_pools, toset([]))) > 0 || (
+        try(cluster.control_plane.auto_mode.node_role_arn, null) == null &&
+        try(cluster.control_plane.auto_mode.node_role_name, null) == null &&
+        try(cluster.control_plane.auto_mode.node_role_permissions_boundary, null) == null &&
+        length(try(cluster.control_plane.auto_mode.node_role_additional_policy_arns, {})) == 0
+      )
+    ])
+    error_message = "Auto Mode node-role settings must be omitted when node_pools is empty; custom NodeClasses own their node roles."
+  }
+
+  validation {
+    condition = alltrue([
+      for cluster in values(var.eks_config) :
+      !try(cluster.control_plane.auto_mode.enabled, false) ||
+      length(try(cluster.control_plane.auto_mode.node_pools, toset([]))) == 0 ||
+      try(cluster.control_plane.auto_mode.node_role_arn, null) != null ||
+      length(coalesce(
+        try(cluster.control_plane.auto_mode.node_role_name, null),
+        "${cluster.control_plane.name}-auto-node-role"
+      )) <= 64
+    ])
+    error_message = "Managed Auto Mode node IAM role names must be 64 characters or fewer; set auto_mode.node_role_name explicitly when needed."
   }
 
   validation {

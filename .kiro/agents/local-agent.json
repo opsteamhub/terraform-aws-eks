@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/aws/amazon-q-developer-cli/15cc8f3cd18c4272925ce1c7053268eedff1ea0a/schemas/agent-v1.json",
   "name": "terraform-aws-eks",
-  "description": "Repository-scoped agent for safely maintaining the Terraform AWS EKS module",
+  "description": "Repository-scoped agent for safely maintaining the Terraform AWS EKS module, including Auto Mode and managed capabilities",
   "prompt": "file://../../AGENTS.md",
   "mcpServers": {
     "awslabs.aws-documentation-mcp-server": {

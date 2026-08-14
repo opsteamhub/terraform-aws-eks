@@ -43,6 +43,25 @@ output "node_groups" {
   }
 }
 
+output "auto_mode" {
+  description = "EKS Auto Mode configuration for clusters that declare the auto_mode block."
+  value = {
+    for key, cluster in aws_eks_cluster.this : key => {
+      enabled                        = try(cluster.compute_config[0].enabled, false)
+      node_pools                     = try(cluster.compute_config[0].node_pools, toset([]))
+      node_role_arn                  = try(cluster.compute_config[0].node_role_arn, null)
+      block_storage_enabled          = try(cluster.storage_config[0].block_storage[0].enabled, false)
+      elastic_load_balancing_enabled = try(cluster.kubernetes_network_config[0].elastic_load_balancing[0].enabled, false)
+    }
+    if local.clusters[key].control_plane.auto_mode != null
+  }
+}
+
+output "auto_mode_node_role_arns" {
+  description = "IAM role ARNs assigned to enabled built-in EKS Auto Mode node pools."
+  value       = local.auto_mode_node_role_arns
+}
+
 output "launch_templates" {
   description = "Managed launch template attributes keyed as cluster_key||node_group_key."
   value = {

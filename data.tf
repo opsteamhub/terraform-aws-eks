@@ -13,6 +13,21 @@ locals {
     )
   }
 
+  auto_mode_clusters = {
+    for key, cluster in local.clusters : key => cluster
+    if cluster.control_plane.auto_mode != null
+  }
+
+  enabled_auto_mode_clusters = {
+    for key, cluster in local.auto_mode_clusters : key => cluster
+    if cluster.control_plane.auto_mode.enabled
+  }
+
+  managed_auto_mode_node_role_clusters = {
+    for key, cluster in local.enabled_auto_mode_clusters : key => cluster
+    if length(cluster.control_plane.auto_mode.node_pools) > 0 && cluster.control_plane.auto_mode.node_role_arn == null
+  }
+
   node_groups = merge({}, [
     for cluster_key, cluster in local.clusters : {
       for node_group_key, node_group in cluster.node_groups :
@@ -24,11 +39,51 @@ locals {
     }
   ]...)
 
+  default_addons = {
+    coredns = {
+      addon_version               = null
+      configuration_values        = null
+      preserve                    = true
+      resolve_conflicts_on_create = "OVERWRITE"
+      resolve_conflicts_on_update = "OVERWRITE"
+      service_account_role_arn    = null
+      tags                        = {}
+    }
+    kube-proxy = {
+      addon_version               = null
+      configuration_values        = null
+      preserve                    = true
+      resolve_conflicts_on_create = "OVERWRITE"
+      resolve_conflicts_on_update = "OVERWRITE"
+      service_account_role_arn    = null
+      tags                        = {}
+    }
+    vpc-cni = {
+      addon_version               = null
+      configuration_values        = null
+      preserve                    = true
+      resolve_conflicts_on_create = "OVERWRITE"
+      resolve_conflicts_on_update = "OVERWRITE"
+      service_account_role_arn    = null
+      tags                        = {}
+    }
+  }
+
+  resolved_addons = {
+    for cluster_key, cluster in local.clusters : cluster_key => (
+      cluster.control_plane.addons != null ? cluster.control_plane.addons : (
+        try(cluster.control_plane.auto_mode.enabled, false) && length(cluster.node_groups) == 0 ? {} : local.default_addons
+      )
+    )
+  }
+
   addons = merge({}, [
     for cluster_key, cluster in local.clusters : {
       for addon_name, addon in merge(
-        cluster.control_plane.addons,
-        length(cluster.control_plane.pod_identity_associations) > 0 ? {
+        local.resolved_addons[cluster_key],
+        length(cluster.control_plane.pod_identity_associations) > 0 && (
+          !try(cluster.control_plane.auto_mode.enabled, false) || length(cluster.node_groups) > 0
+          ) ? {
           eks-pod-identity-agent = {
             addon_version               = null
             configuration_values        = null
