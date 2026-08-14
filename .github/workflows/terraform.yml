@@ -89,3 +89,15 @@ jobs:
 
       - name: Validate complete example
         run: terraform -chdir=examples/complete validate
+
+      - name: Initialize Bottlerocket example
+        run: terraform -chdir=examples/bottlerocket init -backend=false -input=false
+
+      - name: Validate Bottlerocket example
+        run: terraform -chdir=examples/bottlerocket validate
+
+      - name: Initialize capabilities example
+        run: terraform -chdir=examples/capabilities init -backend=false -input=false
+
+      - name: Validate capabilities example
+        run: terraform -chdir=examples/capabilities validate

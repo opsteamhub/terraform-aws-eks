@@ -14,6 +14,8 @@ Calling root module
     ├── optional managed KMS key
     ├── managed or external cluster/node IAM roles
     ├── baseline EKS add-ons
+    ├── optional managed ACK, Argo CD, and KRO capabilities
+    ├── managed or external capability IAM roles
     ├── launch templates and managed node groups
     ├── Access API entries and policy associations
     ├── IAM OIDC provider for IRSA
@@ -28,6 +30,7 @@ Calling root module
 - A public EKS API endpoint cannot be configured with an unrestricted CIDR through the module contract.
 - Managed node launch templates require IMDSv2 and encrypted storage by default.
 - Core add-on versions are not hard-coded to a Kubernetes minor release.
+- EKS Capabilities are opt-in, limited to one per type per cluster, and never receive implicit AWS administrator permissions.
 - Provider and backend configuration never live inside the reusable module.
 - Mocked tests never contact or mutate an AWS account.
 
@@ -35,11 +38,13 @@ Calling root module
 
 The managed cluster IAM role and its policy attachments are created before the EKS control plane. A managed KMS key policy references the resolved cluster role, and the cluster references the key. CloudWatch log-group creation also precedes the cluster so EKS writes to the intended retention policy from the beginning.
 
-Node IAM attachments and launch templates precede managed node groups. Access, identity-provider, add-on, IRSA, and Pod Identity resources use the created cluster name. Pod Identity associations wait for add-ons, including the automatically inserted Pod Identity agent.
+Node IAM attachments and launch templates precede managed node groups. Access, identity-provider, add-on, capability, IRSA, and Pod Identity resources use the created cluster name. Pod Identity associations wait for add-ons, including the automatically inserted Pod Identity agent. A module-managed capability role and its explicit policies precede the capability resource.
 
 ## Trust boundaries
 
-The module creates only baseline IAM permissions. Additional policies are explicit maps, and external role ARNs are treated as opaque caller-owned dependencies. It does not create Kubernetes RBAC objects, service-account trust policies, security-group rules, or network routes.
+The module creates only baseline IAM permissions. Additional policies are explicit maps, and external role ARNs are treated as opaque caller-owned dependencies. A module-managed capability role trusts only `capabilities.eks.amazonaws.com`; KRO and Argo CD can start with that trust-only role, while ACK must receive explicit permissions or an external role. The module does not create Kubernetes RBAC objects, service-account trust policies, security-group rules, or network routes.
+
+EKS automatically creates a capability access entry and baseline Kubernetes policy. That does not replace caller-owned RBAC for Argo CD target clusters or least-privilege authorization for users creating ACK custom resources. Deleting a capability uses `RETAIN`; its managed Kubernetes resources and CRDs must be handled deliberately before deletion.
 
 Kubernetes API access has two separate paths:
 
@@ -52,4 +57,4 @@ Both paths must be reviewed before disabling bootstrap creator permissions or th
 
 Changes to names, subnet IDs, IP family, service CIDR, KMS ownership, or launch-template AMIs can replace stateful infrastructure or nodes. Treat plans containing an EKS cluster replacement as blocked until the migration is explicitly approved.
 
-The repository CI validates formatting, provider schemas, mocked tests, examples, lint, agent configuration, and high/critical IaC findings. A real sandbox plan/apply remains a release gate for a major version because provider mocks cannot validate AWS quotas, organization policies, network reachability, add-on compatibility, or EKS API behavior.
+The repository CI validates formatting, provider schemas, mocked tests, examples, lint, agent configuration, and high/critical IaC findings. A real sandbox plan/apply remains a release gate for a major version because provider mocks cannot validate AWS quotas, organization policies, network reachability, Bottlerocket node joins, add-on or capability readiness, Kubernetes RBAC, or EKS API behavior.

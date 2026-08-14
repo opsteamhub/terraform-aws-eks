@@ -47,6 +47,23 @@ locals {
     }
   ]...)
 
+  capabilities = merge({}, [
+    for cluster_key, cluster in local.clusters : {
+      for capability_key, capability in cluster.control_plane.capabilities :
+      "${cluster_key}||${capability_key}" => merge(capability, {
+        capability_key = capability_key
+        cluster_key    = cluster_key
+        resolved_name  = coalesce(capability.name, capability_key)
+        resolved_type  = upper(capability.type)
+      })
+    }
+  ]...)
+
+  managed_capabilities = {
+    for key, capability in local.capabilities : key => capability
+    if capability.role_arn == null
+  }
+
   identity_providers = merge({}, [
     for cluster_key, cluster in local.clusters : {
       for provider_name, provider in cluster.control_plane.identity_providers :

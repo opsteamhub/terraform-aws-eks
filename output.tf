@@ -74,6 +74,26 @@ output "pod_identity_association_arns" {
   }
 }
 
+output "capabilities" {
+  description = "EKS Capability attributes keyed as cluster_key||capability_key."
+  value = {
+    for key, capability in aws_eks_capability.this : key => {
+      arn                = capability.arn
+      capability_name    = capability.capability_name
+      cluster_name       = capability.cluster_name
+      role_arn           = capability.role_arn
+      type               = capability.type
+      version            = capability.version
+      argo_cd_server_url = try(capability.configuration[0].argo_cd[0].server_url, null)
+    }
+  }
+}
+
+output "capability_role_arns" {
+  description = "IAM role ARNs used by EKS Capabilities, including externally supplied roles."
+  value       = local.capability_role_arns
+}
+
 output "cluster_role_arns" {
   description = "IAM role ARNs used by the EKS control planes."
   value       = local.cluster_role_arns

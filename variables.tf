@@ -85,6 +85,37 @@ variable "eks_config" {
         vpc-cni    = {}
       })
 
+      capabilities = optional(map(object({
+        name                      = optional(string)
+        type                      = string
+        role_arn                  = optional(string)
+        role_name                 = optional(string)
+        role_permissions_boundary = optional(string)
+        role_policy_arns          = optional(map(string), {})
+        role_inline_policy        = optional(string)
+        delete_propagation_policy = optional(string, "RETAIN")
+
+        argo_cd = optional(object({
+          namespace = optional(string)
+          aws_idc = object({
+            idc_instance_arn = string
+            idc_region       = optional(string)
+          })
+          network_access = optional(object({
+            vpce_ids = set(string)
+          }))
+          rbac_role_mappings = optional(map(object({
+            role = string
+            identities = set(object({
+              id   = string
+              type = string
+            }))
+          })), {})
+        }))
+
+        tags = optional(map(string), {})
+      })), {})
+
       identity_providers = optional(map(object({
         client_id       = string
         issuer_url      = string
@@ -301,5 +332,112 @@ variable "eks_config" {
       ]
     ]))
     error_message = "Managed node IAM role names must be 64 characters or fewer; set node_role_name explicitly when needed."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for cluster in values(var.eks_config) : [
+        for capability_key, capability in cluster.control_plane.capabilities :
+        contains(["ACK", "ARGOCD", "KRO"], upper(capability.type)) &&
+        length(trimspace(coalesce(capability.name, capability_key))) >= 1 &&
+        length(trimspace(coalesce(capability.name, capability_key))) <= 100 &&
+        can(regex("^[A-Za-z0-9_-]+$", coalesce(capability.name, capability_key)))
+      ]
+    ]))
+    error_message = "Each capability type must be ACK, ARGOCD, or KRO, and its resolved name must contain 1 to 100 alphanumeric, hyphen, or underscore characters."
+  }
+
+  validation {
+    condition = alltrue([
+      for cluster in values(var.eks_config) :
+      length(distinct([
+        for capability in values(cluster.control_plane.capabilities) : upper(capability.type)
+      ])) == length(cluster.control_plane.capabilities)
+    ])
+    error_message = "Each cluster can configure at most one capability of each type."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for cluster in values(var.eks_config) : [
+        for capability in values(cluster.control_plane.capabilities) :
+        upper(capability.delete_propagation_policy) == "RETAIN"
+      ]
+    ]))
+    error_message = "EKS Capabilities currently support only RETAIN as delete_propagation_policy."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for cluster in values(var.eks_config) : [
+        for capability in values(cluster.control_plane.capabilities) :
+        upper(capability.type) == "ARGOCD" ? (
+          capability.argo_cd != null &&
+          trimspace(capability.argo_cd.aws_idc.idc_instance_arn) != "" &&
+          (capability.argo_cd.namespace == null || trimspace(capability.argo_cd.namespace) != "") &&
+          (capability.argo_cd.network_access == null || length(capability.argo_cd.network_access.vpce_ids) > 0) &&
+          length(capability.argo_cd.rbac_role_mappings) > 0 &&
+          alltrue([
+            for mapping in values(capability.argo_cd.rbac_role_mappings) :
+            contains(["ADMIN", "EDITOR", "VIEWER"], upper(mapping.role)) &&
+            length(mapping.identities) > 0 && alltrue([
+              for identity in mapping.identities :
+              trimspace(identity.id) != "" &&
+              contains(["SSO_GROUP", "SSO_USER"], upper(identity.type))
+            ])
+          ])
+        ) : capability.argo_cd == null
+      ]
+    ]))
+    error_message = "ARGOCD requires aws_idc and an ADMIN, EDITOR, or VIEWER mapping to non-empty SSO_GROUP or SSO_USER identities; configured namespace and network_access values cannot be empty, and argo_cd must be omitted for ACK and KRO."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for cluster in values(var.eks_config) : [
+        for capability in values(cluster.control_plane.capabilities) :
+        upper(capability.type) != "ACK" || capability.role_arn != null ||
+        length(capability.role_policy_arns) > 0 || capability.role_inline_policy != null
+      ]
+    ]))
+    error_message = "ACK requires an external role_arn or explicit managed-role permissions through role_policy_arns or role_inline_policy."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for cluster in values(var.eks_config) : [
+        for capability in values(cluster.control_plane.capabilities) :
+        capability.role_arn == null || (
+          capability.role_name == null &&
+          capability.role_permissions_boundary == null &&
+          length(capability.role_policy_arns) == 0 &&
+          capability.role_inline_policy == null
+        )
+      ]
+    ]))
+    error_message = "Managed capability role settings must be omitted when role_arn is supplied."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for cluster in values(var.eks_config) : [
+        for capability_key, capability in cluster.control_plane.capabilities :
+        capability.role_arn != null || length(coalesce(
+          capability.role_name,
+          "${cluster.control_plane.name}-${coalesce(capability.name, capability_key)}-capability-role"
+        )) <= 64
+      ]
+    ]))
+    error_message = "Managed capability IAM role names must be 64 characters or fewer; set role_name explicitly when needed."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for cluster in values(var.eks_config) : [
+        for capability in values(cluster.control_plane.capabilities) :
+        capability.role_inline_policy == null || can(jsondecode(capability.role_inline_policy))
+      ]
+    ]))
+    error_message = "role_inline_policy must contain valid JSON."
   }
 }

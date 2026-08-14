@@ -7,7 +7,7 @@ Version 2 is a breaking redesign. Do not point a live state at v2 and apply imme
 1. Pin the current v1 commit and save a reviewed state backup using your normal backend procedure.
 2. Record the actual EKS cluster name, Kubernetes service CIDR, subnet IDs, cluster/node role ARNs, KMS key ARN, add-on versions, OIDC provider ARN, and node-group launch-template IDs.
 3. Confirm that the execution identity can read the cluster and move/import state but do not apply infrastructure changes.
-4. Upgrade Terraform to at least 1.7 and the AWS provider to a compatible 6.x release in a separate, reviewed change where practical.
+4. Upgrade Terraform to at least 1.7 and the AWS provider to 6.25 or newer in a separate, reviewed change where practical.
 5. Test the migration against a copy of state or a disposable environment first.
 
 ## Input changes
@@ -24,7 +24,7 @@ Version 2 is a breaking redesign. Do not point a live state at v2 and apply imme
 | `taint` list | `taints` map with stable keys. |
 | External launch-template module and AMI filters | Built-in launch template; use EKS-managed AL2023 by default or pass an explicit `image_id` and bootstrap `user_data`. |
 | Version-gated OIDC provider | `irsa.enabled`, available for every supported version. |
-| One `eks_clusters_name` output | Structured cluster, node, IAM, KMS, OIDC, Pod Identity, and launch-template outputs. The old output name remains as an alias. |
+| One `eks_clusters_name` output | Structured cluster, node, IAM, KMS, OIDC, Pod Identity, capability, and launch-template outputs. The old output name remains as an alias. |
 
 `default_tags` is new and mandatory with `Environment`, `Project`, and `Owner`.
 
@@ -64,7 +64,7 @@ These are examples, not a script. Inspect `terraform state list` because v1 opti
 4. Move/import state addresses one resource class at a time.
 5. Run `terraform plan -refresh-only`, then a normal saved plan.
 6. Treat any EKS control-plane replacement as a migration error until deliberately approved. Node-group replacement may also disrupt workloads and must respect PodDisruptionBudgets and capacity.
-7. Enable modern capabilities such as Access API, Pod Identity, managed add-ons, and a customer-managed KMS key in separate reviewed changes.
+7. Enable modern EKS features such as Access API, Pod Identity, managed add-ons, a customer-managed KMS key, or EKS Capabilities in separate reviewed changes.
 
 ## Rollback
 

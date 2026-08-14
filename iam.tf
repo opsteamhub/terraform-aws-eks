@@ -58,6 +58,73 @@ resource "aws_iam_role_policy_attachment" "cluster" {
   policy_arn = each.value.policy_arn
 }
 
+data "aws_iam_policy_document" "capability_assume_role" {
+  for_each = local.managed_capabilities
+
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRole", "sts:TagSession"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["capabilities.eks.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "capability" {
+  for_each = data.aws_iam_policy_document.capability_assume_role
+
+  name = coalesce(
+    local.capabilities[each.key].role_name,
+    "${local.clusters[local.capabilities[each.key].cluster_key].control_plane.name}-${local.capabilities[each.key].resolved_name}-capability-role"
+  )
+  assume_role_policy   = each.value.json
+  permissions_boundary = local.capabilities[each.key].role_permissions_boundary
+  tags = merge(
+    local.cluster_tags[local.capabilities[each.key].cluster_key],
+    local.capabilities[each.key].tags,
+    { Name = "${local.clusters[local.capabilities[each.key].cluster_key].control_plane.name}-${local.capabilities[each.key].resolved_name}-capability-role" }
+  )
+}
+
+locals {
+  capability_role_arns = {
+    for key, capability in local.capabilities : key => coalesce(
+      capability.role_arn,
+      try(aws_iam_role.capability[key].arn, null)
+    )
+  }
+
+  capability_role_policy_attachments = merge({}, [
+    for capability_key, capability in local.managed_capabilities : {
+      for name, policy_arn in capability.role_policy_arns :
+      "${capability_key}||${name}" => {
+        capability_key = capability_key
+        policy_arn     = policy_arn
+      }
+    }
+  ]...)
+}
+
+resource "aws_iam_role_policy_attachment" "capability" {
+  for_each = local.capability_role_policy_attachments
+
+  role       = aws_iam_role.capability[each.value.capability_key].name
+  policy_arn = each.value.policy_arn
+}
+
+resource "aws_iam_role_policy" "capability" {
+  for_each = {
+    for key, capability in local.managed_capabilities : key => capability
+    if capability.role_inline_policy != null
+  }
+
+  name   = "${aws_iam_role.capability[each.key].name}-permissions"
+  role   = aws_iam_role.capability[each.key].name
+  policy = each.value.role_inline_policy
+}
+
 data "aws_iam_policy_document" "node_assume_role" {
   for_each = {
     for key, node_group in local.node_groups : key => node_group

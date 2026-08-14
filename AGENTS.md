@@ -29,6 +29,10 @@ terraform -chdir=examples/basic init -backend=false -input=false
 terraform -chdir=examples/basic validate
 terraform -chdir=examples/complete init -backend=false -input=false
 terraform -chdir=examples/complete validate
+terraform -chdir=examples/bottlerocket init -backend=false -input=false
+terraform -chdir=examples/bottlerocket validate
+terraform -chdir=examples/capabilities init -backend=false -input=false
+terraform -chdir=examples/capabilities validate
 
 tflint --init
 tflint --recursive --format compact
@@ -47,4 +51,4 @@ Terraform provider mocking requires Terraform 1.7 or newer. CI is the source of 
 
 ## Review focus
 
-EKS changes can remove operator access, replace a control plane, disrupt nodes, expose the Kubernetes API, or broaden IAM trust. Review name, version, service CIDR, subnet, endpoint, access mode, KMS, IAM, add-on, launch-template, and scaling changes explicitly. Mocked tests do not verify AWS quotas, organization policies, network reachability, add-on compatibility, workload disruption, or Kubernetes RBAC; require a controlled sandbox plan/apply before a major release.
+EKS changes can remove operator access, replace a control plane, disrupt nodes, expose the Kubernetes API, or broaden IAM trust. Review name, version, service CIDR, subnet, endpoint, access mode, KMS, IAM, add-on, capability, launch-template, AMI, and scaling changes explicitly. For ACK, review both the capability role and who can create its Kubernetes custom resources. For Argo CD, review Identity Center mappings, target-cluster RBAC, repository credentials, and network access. Capability deletion retains managed Kubernetes resources and CRDs, so remove those resources deliberately before deletion. Mocked tests do not verify AWS quotas, organization policies, network reachability, AMI compatibility, add-on or capability readiness, workload disruption, or Kubernetes RBAC; require a controlled sandbox plan/apply before a major release.

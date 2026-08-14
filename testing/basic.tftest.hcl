@@ -69,6 +69,13 @@ mock_provider "aws" {
     }
   }
 
+  mock_resource "aws_eks_capability" {
+    defaults = {
+      arn     = "arn:aws:eks:us-east-1:123456789012:capability/test-cluster/example"
+      version = "1.0.0"
+    }
+  }
+
   mock_resource "aws_iam_openid_connect_provider" {
     defaults = {
       arn = "arn:aws:iam::123456789012:oidc-provider/oidc.eks.us-east-1.amazonaws.com/id/EXAMPLE"
@@ -321,6 +328,247 @@ run "creates_access_entries_and_scoped_policy_associations" {
     )
     error_message = "EKS API access and Pod Identity must support modern, scoped authorization."
   }
+}
+
+run "supports_bottlerocket_and_managed_eks_capabilities" {
+  command = apply
+
+  variables {
+    default_tags = {
+      Environment = "test"
+      Owner       = "platform"
+      Project     = "eks-module"
+    }
+
+    eks_config = {
+      modern = {
+        control_plane = {
+          name = "modern-cluster"
+          vpc_config = {
+            subnet_ids = [
+              "subnet-0123456789abcdef0",
+              "subnet-0123456789abcdef1",
+            ]
+          }
+          irsa = {
+            enabled = false
+          }
+          capabilities = {
+            ack = {
+              type = "ACK"
+              role_inline_policy = jsonencode({
+                Version = "2012-10-17"
+                Statement = [{
+                  Effect   = "Allow"
+                  Action   = "sts:AssumeRole"
+                  Resource = "arn:aws:iam::123456789012:role/ack-resource-role"
+                }]
+              })
+            }
+            argocd = {
+              type = "ARGOCD"
+              role_policy_arns = {
+                repository_read = "arn:aws:iam::123456789012:policy/argocd-repository-read"
+              }
+              argo_cd = {
+                aws_idc = {
+                  idc_instance_arn = "arn:aws:sso:::instance/ssoins-0123456789abcdef"
+                  idc_region       = "us-east-1"
+                }
+                rbac_role_mappings = {
+                  administrators = {
+                    role = "ADMIN"
+                    identities = [{
+                      id   = "1234567890-abcdef"
+                      type = "SSO_GROUP"
+                    }]
+                  }
+                }
+              }
+            }
+            kro = {
+              type = "KRO"
+            }
+          }
+        }
+
+        node_groups = {
+          bottlerocket = {
+            ami_type       = "BOTTLEROCKET_x86_64"
+            instance_types = ["m7i.large"]
+            launch_template = {
+              user_data = <<-TOML
+                [settings.kubernetes]
+                max-pods = 42
+              TOML
+            }
+          }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition = (
+      aws_eks_node_group.this["modern||bottlerocket"].ami_type == "BOTTLEROCKET_x86_64" &&
+      aws_launch_template.node["modern||bottlerocket"].image_id == null &&
+      base64decode(aws_launch_template.node["modern||bottlerocket"].user_data) == "[settings.kubernetes]\nmax-pods = 42\n"
+    )
+    error_message = "Bottlerocket must use an EKS-managed AMI and preserve TOML launch-template user data."
+  }
+
+  assert {
+    condition = (
+      length(aws_eks_capability.this) == 3 &&
+      aws_eks_capability.this["modern||ack"].type == "ACK" &&
+      aws_eks_capability.this["modern||argocd"].configuration[0].argo_cd[0].aws_idc[0].idc_region == "us-east-1" &&
+      aws_eks_capability.this["modern||kro"].type == "KRO"
+    )
+    error_message = "ACK, Argo CD, and KRO capabilities must be created from the typed map."
+  }
+
+  assert {
+    condition = (
+      length(aws_iam_role.capability) == 3 &&
+      length(aws_iam_role_policy.capability) == 1 &&
+      length(aws_iam_role_policy_attachment.capability) == 1
+    )
+    error_message = "Capabilities must receive dedicated managed roles and only the explicitly configured policies."
+  }
+}
+
+run "supports_an_external_capability_role" {
+  command = apply
+
+  variables {
+    default_tags = {
+      Environment = "test"
+      Owner       = "platform"
+      Project     = "eks-module"
+    }
+
+    eks_config = {
+      external_capability = {
+        control_plane = {
+          name = "external-capability"
+          vpc_config = {
+            subnet_ids = ["subnet-a", "subnet-b"]
+          }
+          irsa = {
+            enabled = false
+          }
+          capabilities = {
+            ack = {
+              type     = "ACK"
+              role_arn = "arn:aws:iam::123456789012:role/external-ack-capability-role"
+            }
+          }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition = (
+      length(aws_eks_capability.this) == 1 &&
+      length(aws_iam_role.capability) == 0 &&
+      aws_eks_capability.this["external_capability||ack"].role_arn == "arn:aws:iam::123456789012:role/external-ack-capability-role"
+    )
+    error_message = "An external capability role must bypass managed IAM role creation."
+  }
+}
+
+run "rejects_duplicate_capability_types" {
+  command = plan
+
+  variables {
+    default_tags = {
+      Environment = "test"
+      Owner       = "platform"
+      Project     = "eks-module"
+    }
+
+    eks_config = {
+      duplicate = {
+        control_plane = {
+          name = "duplicate-capabilities"
+          vpc_config = {
+            subnet_ids = ["subnet-a", "subnet-b"]
+          }
+          capabilities = {
+            kro_primary = {
+              type = "KRO"
+            }
+            kro_secondary = {
+              type = "kro"
+            }
+          }
+        }
+      }
+    }
+  }
+
+  expect_failures = [var.eks_config]
+}
+
+run "rejects_ack_without_explicit_permissions" {
+  command = plan
+
+  variables {
+    default_tags = {
+      Environment = "test"
+      Owner       = "platform"
+      Project     = "eks-module"
+    }
+
+    eks_config = {
+      unsafe_ack = {
+        control_plane = {
+          name = "unsafe-ack"
+          vpc_config = {
+            subnet_ids = ["subnet-a", "subnet-b"]
+          }
+          capabilities = {
+            ack = {
+              type = "ACK"
+            }
+          }
+        }
+      }
+    }
+  }
+
+  expect_failures = [var.eks_config]
+}
+
+run "rejects_argocd_without_identity_center_configuration" {
+  command = plan
+
+  variables {
+    default_tags = {
+      Environment = "test"
+      Owner       = "platform"
+      Project     = "eks-module"
+    }
+
+    eks_config = {
+      incomplete_argocd = {
+        control_plane = {
+          name = "incomplete-argocd"
+          vpc_config = {
+            subnet_ids = ["subnet-a", "subnet-b"]
+          }
+          capabilities = {
+            argocd = {
+              type = "ARGOCD"
+            }
+          }
+        }
+      }
+    }
+  }
+
+  expect_failures = [var.eks_config]
 }
 
 run "rejects_an_unrestricted_public_endpoint" {

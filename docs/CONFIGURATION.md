@@ -60,6 +60,62 @@ addons = {
 }
 ```
 
+### EKS Capabilities
+
+`capabilities` is an opt-in map for the EKS-managed `ACK`, `ARGOCD`, and `KRO` services. The map key is the stable Terraform identity and becomes `capability_name` unless `name` is supplied. AWS permits only one capability of each type per cluster.
+
+| Field | Default | Notes |
+| --- | --- | --- |
+| `name` | Map key | AWS capability name. Changing it replaces the resource. |
+| `type` | Required | `ACK`, `ARGOCD`, or `KRO`; changing it replaces the resource. |
+| `role_arn` | Managed role | External same-account capability role. Supplying it disables managed role creation. |
+| `role_name` | `<cluster>-<capability>-capability-role` | Used only for a managed role. |
+| `role_permissions_boundary` | `null` | Optional boundary for a managed role. |
+| `role_policy_arns` | `{}` | Explicit policy attachments for a managed role. |
+| `role_inline_policy` | `null` | Explicit JSON policy for a managed role. |
+| `delete_propagation_policy` | `RETAIN` | The only value currently supported by EKS. |
+| `argo_cd` | `null` | Required only for `ARGOCD`; configures Identity Center, optional VPC endpoints, and RBAC mappings. |
+
+When the module creates the role, its trust policy allows only `sts:AssumeRole` and `sts:TagSession` from `capabilities.eks.amazonaws.com`. It does not attach administrator policies. KRO can use a trust-only role, although composed resources may require separate Kubernetes RBAC. Argo CD needs additional IAM permissions only for AWS-backed repositories, secrets, images, or other integrations. ACK must receive an external role or explicit managed-role policies; prefer role selectors and narrowly scoped target roles over broad permissions.
+
+```hcl
+capabilities = {
+  ack = {
+    type     = "ACK"
+    role_arn = aws_iam_role.ack_capability.arn
+  }
+
+  argocd = {
+    type = "ARGOCD"
+    argo_cd = {
+      aws_idc = {
+        idc_instance_arn = var.idc_instance_arn
+        idc_region       = "us-east-1"
+      }
+      rbac_role_mappings = {
+        administrators = {
+          role = "ADMIN"
+          identities = [{
+            id   = var.idc_admin_group_id
+            type = "SSO_GROUP"
+          }]
+        }
+      }
+    }
+  }
+
+  kro = {
+    type = "KRO"
+  }
+}
+```
+
+Argo CD requires AWS Identity Center and at least one RBAC mapping. The optional `network_access.vpce_ids` field restricts its network path to configured VPC endpoints. The returned `capabilities` output includes the Argo CD server URL when AWS makes it available.
+
+EKS creates an access entry and baseline capability policy automatically. Argo CD still needs explicit RBAC on every target cluster. ACK users who can create its custom resources can manage AWS resources within the capability role's permissions. Capability deletion retains CRDs and managed Kubernetes resources, so delete or transfer those resources before removing the Terraform entry.
+
+Capabilities incur hourly charges while active; AWS resources created through them are billed separately. See the [EKS Capabilities overview](https://docs.aws.amazon.com/eks/latest/userguide/capabilities.html), [capability IAM role guidance](https://docs.aws.amazon.com/eks/latest/userguide/capability-role.html), and [security considerations](https://docs.aws.amazon.com/eks/latest/userguide/capabilities-security.html).
+
 ## Access and workload identity
 
 The default authentication mode is `API_AND_CONFIG_MAP` to support staged migration from the legacy `aws-auth` ConfigMap. `access_entries` are unavailable with `CONFIG_MAP` mode.
@@ -116,6 +172,8 @@ Terraform ignores only `scaling_config.desired_size` after creation so a Kuberne
 
 Supplying `launch_template.image_id` makes the node group use a custom AMI and suppresses EKS-managed `ami_type`, Kubernetes `version`, and `release_version`. The caller must provide correct bootstrap user data for a custom AMI. `launch_template.user_data` accepts plain text and the module base64-encodes it.
 
+For EKS-managed Bottlerocket, set `ami_type` to `BOTTLEROCKET_x86_64` or `BOTTLEROCKET_ARM_64`, choose matching instance types, and leave `launch_template.image_id` unset. Optional `launch_template.user_data` must be valid Bottlerocket TOML; EKS merges it with its managed bootstrap settings. With a custom Bottlerocket `image_id`, EKS does not merge bootstrap data and the caller owns the complete configuration. See the [Bottlerocket example](../examples/bottlerocket) and [EKS launch-template requirements](https://docs.aws.amazon.com/eks/latest/userguide/launch-templates.html).
+
 Supplying `launch_template.security_group_ids` replaces the security groups EKS would normally apply through the launch template. Include the required cluster-to-node connectivity and validate it in a sandbox.
 
-External cluster or node role ARNs are never modified by this module. The caller must attach all required policies before EKS creation.
+External cluster, node, or capability role ARNs are never modified by this module. The caller must attach all required policies and trust before EKS creation.

@@ -32,13 +32,23 @@ module "eks" {
       }
 
       node_groups = {
-        system = {}
+        bottlerocket = {
+          ami_type       = "BOTTLEROCKET_x86_64"
+          instance_types = ["m7i.large"]
+
+          launch_template = {
+            user_data = <<-TOML
+              [settings.kubernetes]
+              max-pods = 42
+            TOML
+          }
+        }
       }
     }
   }
 }
 
-output "cluster_name" {
-  description = "Created EKS cluster name."
-  value       = module.eks.cluster_names["primary"]
+output "node_group" {
+  description = "Created Bottlerocket managed node group attributes."
+  value       = module.eks.node_groups["primary||bottlerocket"]
 }
