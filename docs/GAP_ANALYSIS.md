@@ -36,8 +36,10 @@ This document records the v1 audit so future maintainers and coding agents do no
 
 ## Candidate follow-ups
 
-1. Run the v2 graph through a disposable AWS sandbox, including private endpoint access, add-on, capability, and Auto Mode readiness, pure and hybrid compute, AL2023 and Bottlerocket node joins, Access API, IRSA, Pod Identity, and destroy behavior.
-2. Publish a versioned v2 release only after the dependency-free EKS PR is approved and the sandbox evidence is attached.
-3. Add dedicated presets only when there is a real consumer and acceptance test for Bottlerocket ARM/GPU, Fargate, custom Auto Mode NodePool/NodeClass resources, or self-managed Karpenter.
-4. Evaluate OPA/Conftest organization policy and Terraform plan fixtures after the first stable state migration.
-5. Add environment-specific `moved` blocks or import manifests in consumer repositories, not in this generic module.
+1. Baseline completed on 2026-08-17: EKS 1.35, restricted public endpoint, AL2023 managed nodes, core add-ons, Access API, Pod Identity, Karpenter readiness, server-side AL2023/Bottlerocket manifest validation, stable post-apply plans, and clean destroy. VPC creation was safely blocked before mutation by the AWS Dev quota of 5/5 VPCs.
+2. Run dedicated sandbox gates for private-only endpoint access, EKS Capabilities, pure and hybrid Auto Mode, Bottlerocket node joins, IRSA workloads, custom provisioning, interruption handling, migration, and rollback.
+3. Add a separate end-to-end consumer example that composes released VPC, EKS, and Karpenter versions and automates ordered apply, smoke, and destroy without coupling their reusable module states.
+4. Publish a versioned v2 release only after the dependency-free EKS PR is approved, the required gates are attached, and mutable-branch consumers are pinned.
+5. Add dedicated presets only when there is a real consumer and acceptance test for Bottlerocket ARM/GPU, Fargate, custom Auto Mode NodePool/NodeClass resources, or self-managed Karpenter.
+6. Evaluate OPA/Conftest organization policy and Terraform plan fixtures after the first stable state migration.
+7. Add environment-specific `moved` blocks or import manifests in consumer repositories, not in this generic module.

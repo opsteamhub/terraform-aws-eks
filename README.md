@@ -129,3 +129,5 @@ terraform -chdir=examples/auto-mode validate
 ```
 
 Mocked tests validate contracts and the Terraform graph; they do not replace a reviewed plan and a controlled apply in a disposable AWS sandbox before a major release.
+
+A baseline AWS Dev smoke on 2026-08-17 created EKS 1.35 with two Ready AL2023 managed nodes, healthy core add-ons, Pod Identity, and Karpenter, then completed a clean Terraform destroy. AL2023 and Bottlerocket Karpenter manifests also passed server-side dry-run. Live Auto Mode, EKS Capabilities, Bottlerocket node joins, private-only endpoint access, workload migration, and disruption behavior still require dedicated sandbox gates.
