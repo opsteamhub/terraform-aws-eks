@@ -53,7 +53,7 @@ resource "aws_launch_template" "node" {
   }
 
   dynamic "tag_specifications" {
-    for_each = toset(["instance", "volume"])
+    for_each = toset(["instance", "network-interface", "volume"])
 
     content {
       resource_type = tag_specifications.value

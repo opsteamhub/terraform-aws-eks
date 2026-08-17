@@ -159,6 +159,14 @@ run "creates_a_secure_cluster_with_plug_and_play_defaults" {
   }
 
   assert {
+    condition = contains(
+      [for spec in aws_launch_template.node["primary||system"].tag_specifications : spec.resource_type],
+      "network-interface",
+    )
+    error_message = "Managed node launch templates must propagate organizational tags to network interfaces."
+  }
+
+  assert {
     condition = alltrue([
       for key in ["Environment", "Owner", "Project"] :
       aws_eks_cluster.this["primary"].tags[key] != ""
