@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses semantic versioning after the first versioned release.
 
+## [1.0.1](https://github.com/opsteamhub/terraform-aws-eks/compare/v1.0.0...v1.0.1) (2026-09-10)
+
+
+### Bug Fixes
+
+* **ci:** remove duplicate Dependabot ecosystem ([cead556](https://github.com/opsteamhub/terraform-aws-eks/commit/cead556df2ee32189b6fd4b2de8d52e9d28bbf4a))
+* **eks:** propagate tags to managed node network interfaces ([23e3476](https://github.com/opsteamhub/terraform-aws-eks/commit/23e34763a548e1af458e0d39ed7d53d6e31540a8))
+
 ## [Unreleased]
 
 ### Added
