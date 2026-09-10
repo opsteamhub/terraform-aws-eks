@@ -1,781 +1,528 @@
+variable "default_tags" {
+  description = "Tags applied to every taggable resource. Environment, Project, and Owner are required."
+  type        = map(string)
+
+  validation {
+    condition = alltrue([
+      for key in ["Environment", "Project", "Owner"] :
+      try(trimspace(var.default_tags[key]) != "", false)
+    ])
+    error_message = "default_tags must contain non-empty Environment, Project, and Owner values."
+  }
+}
+
 variable "eks_config" {
-  description = "Deploy EKS configs"
-  type = map(
-    object(
-      {
-        node_groups = optional(
-          map(
-            object(
-              {
-                ami_type               = optional(string, "AL2_x86_64")
-                capacity_type          = optional(string, "ON_DEMAND")
-                disk_size              = optional(string, 40)
-                force_update_version   = optional(bool, false)
-                instance_types         = optional(set(string), ["t3.medium"])
-                exclusion_instance_types = optional(set(string))
-                iam_role = optional(
-                  object(
-                    {
-                      override_default_assume_role_policy = optional(bool, false)
-                      assume_role_policy_statements = optional(
-                        set(
-                          object(
-                            {
-                              actions        = optional(set(string))
-                              condition      = optional(
-                                set(
-                                  object(    
-                                    {
-                                      test     = optional(string)
-                                      variable = optional(string)
-                                      values   = optional(set(string))
-                                    }
-                                  )
-                                )
-                              )
-                              effect         = optional(string, "Deny")
-                              not_actions    = optional(set(string))
-                              not_principals = optional(
-                                set(
-                                  object(
-                                    {  
-                                    identifiers = optional(set(string))
-                                    type        = optional(string)  
-                                    }
-                                  )
-                                )
-                              )
-                              not_resources  = optional(set(string))
-                              principals     = optional(
-                                set(
-                                  object(
-                                    {  
-                                    identifiers = optional(set(string))
-                                    type        = optional(string)
-                                    }
-                                  )
-                                )    
-                              )
-                              resources      = optional(set(string))
-                              sid            = optional(string)
-                            }
-                          )
-                        )
-                      )
-                      create                = optional(bool, true)
-                      description           = optional(string)
-                      force_detach_policies = optional(bool, true)
-                      inline_policy         = optional(
-                        set(
-                          object(
-                            {
-                              actions        = optional(set(string))
-                              condition      = optional(
-                                set(
-                                  object(    
-                                    {
-                                      test     = optional(string)
-                                      variable = optional(string)
-                                      values   = optional(set(string))
-                                    }
-                                  )
-                                )
-                              )
-                              effect         = optional(string, "Deny")
-                              not_actions    = optional(set(string))
-                              not_principals = optional(
-                                set(
-                                  object(
-                                    {  
-                                    identifiers = optional(set(string))
-                                    type        = optional(string)  
-                                    }
-                                  )
-                                )
-                              )
-                              not_resources  = optional(set(string))
-                              principals     = optional(
-                                set(
-                                  object(
-                                    {  
-                                    identifiers = optional(set(string))
-                                    type        = optional(string)
-                                    }
-                                  )
-                                )    
-                              )
-                              resources      = optional(set(string))
-                              sid            = optional(string)
-                            }
-                          )
-                        )
-                      )
-                      name_prefix                    = optional(string)
-                      path                           = optional(string, "/")
-                      permissions_boundary           = optional(string)
-                      override_policy_attachments    = optional(bool, false)
-                      policy_attachments             = optional(set(string), ["AmazonEKSWorkerNodePolicy", "AmazonEC2ContainerRegistryReadOnly", "AmazonEKS_CNI_Policy"])
-                      role_arn                       = optional(string)
-                      tags                           = optional(map(string))
-                    }
-                  ),
-                  { }
-                )
-                labels                   = optional(map(string))
-                launch_template          = optional(
-                  object(
-                    { 
-                      ami = optional(
-                        object(
-                          {
-                            ami_filters = optional(
-                              list(
-                                object(
-                                  {
-                                    name   = optional(string)
-                                    values = optional(list(string))
-                                  }
-                                )
-                              )
-                            )
-                            executable_users   = optional(set(string))
-                            image_id           = optional(string)
-                            include_deprecated = optional(bool, false)
-                            most_recent        = optional(bool, true)
-                            name_regex         = optional(string)
-                            owners             = optional(set(string), ["self"])
-                          }
-                        ),
-                        {
-                          ami_filters = [
-                            {
-                              name   = "name"
-                              values = ["amazon-eks-node-1.27*"]
-                            },
-                            {
-                              name   = "root-device-type"
-                              values = ["ebs"]
-                            },
-                            {
-                              name   = "virtualization-type"
-                              values = ["hvm"]
-                            }
-                          ]
-                          owners = ["amazon"]
-                        }
-                      )
-                      block_device_mappings = optional(
-                        set(
-                          object(
-                            {
-                              device_name  = optional(string)
-                              ebs = optional(
-                                object(  
-                                  {
-                                    delete_on_termination = optional(bool, true)
-                                    encrypted             = optional(bool, true)
-                                    iops                  = optional(string, 3000)
-                                    kms_key_id            = optional(string)
-                                    snapshot_id           = optional(string)
-                                    throughput            = optional(string, 125)
-                                    volume_size           = optional(string, 20)
-                                    volume_type           = optional(string, "gp3")
-                                  }
-                                )
-                              )
-                              no_device    = optional(string)
-                              virtual_name = optional(string)
-                            }
-                          )
-                        )
-                      )
-                      capacity_reservation_specification = optional(
-                        object(
-                          {
-                            capacity_reservation_preference = optional(string, "none")
-                            capacity_reservation_target     = optional(
-                              object(
-                                {
-                                  capacity_reservation_id                 = optional(string)
-                                  capacity_reservation_resource_group_arn = optional(string)
-                                }
-                              )
-                            )
-                          }
-                        )
-                      ) 
-                      cpu_options = optional(
-                        object(  
-                          {
-                            amd_sev_snp      = optional(string, "disabled") ##
-                            core_count       = optional(string, 1)          ##
-                            threads_per_core = optional(string, 2)
-                          }
-                        ), { }
-                      )
-                      credit_specification               = optional(
-                        object(
-                          {
-                            cpu_credits = optional(string, "unlimited")
-                          }
-                        ),
-                        { }
-                      )
-                      default_version                    = optional(string)
-                      description                        = optional(string)
-                      disable_api_stop_compatible        = optional(bool, false)
-                      #disable_api_stop                   = optional(bool, true)
-                      disable_api_termination_compatible = optional(bool, false)
-                      #disable_api_termination            = optional(bool, true)
-                      ebs_optimized                      = optional(bool, true)
-                      elastic_gpu_specifications         = optional(
-                        object(
-                          {
-                            type = optional(string)
-                          }
-                        )
-                      )
-                      elastic_inference_accelerator = optional(
-                        object(
-                          {
-                            type = optional(string)
-                          }
-                        )
-                      )
-                      enclave_options = optional(
-                        object(
-                          {
-                            enable = optional(bool, false)
-                          }
-                        ), {}
-                      )
-                      hibernation_options = optional(
-                        object(
-                          {
-                            enable = optional(bool, false)
-                          }
-                        )
-                      )
-                      iam_instance_profile = optional(
-                        object(
-                          {
-                            arn  = optional(string)
-                            name = optional(string)
-                          }
-                        )
-                      )
-                      instance_initiated_shutdown_behavior_compatible = optional(bool, false)
-                      instance_market_options              = optional(
-                        object(
-                          {
-                            market_type  = optional(string)
-                            spot_options = optional(
-                              object(
-                                {
-                                  block_duration_minutes         = optional(string)
-                                  instance_interruption_behavior = optional(string, "terminate")
-                                  max_price                      = optional(string)
-                                  spot_instance_type             = optional(string)
-                                  valid_until                    = optional(string)
-                                }
-                              )
-                            )
-                          }
-                        )
-                      )
-                      instance_requirements = optional(
-                        object(
-                          {
-                            accelerator_count = optional(
-                              object(
-                                {
-                                  min = optional(string)
-                                  max = optional(string)
-                                }
-                              )
-                            )
-                            accelerator_manufacturers = optional(set(string))
-                            accelerator_names         = optional(set(string))
-                            accelerator_total_memory_mib = optional(
-                                      object(
-                                        {
-                                          min = optional(string)
-                                          max = optional(string)
-                                        }
-                                      )
-                            )
-                            accelerator_types      = optional(set(string))
-                            allowed_instance_types = optional(set(string))
-                            bare_metal             = optional(string, "excluded")
-                            baseline_ebs_bandwidth_mbps = optional(
-                                      object(
-                                        {
-                                          min = optional(string)
-                                          max = optional(string)
-                                        }
-                                      )
-                            )
-                            burstable_performance   = optional(string, "excluded")
-                            cpu_manufacturers       = optional(set(string))
-                            excluded_instance_types = optional(set(string))
-                            instance_generations    = optional(set(string))
-                            local_storage           = optional(string, "included")
-                            local_storage_types     = optional(set(string), ["ssd"])
-                            memory_gib_per_vcpu     = optional(
-                                      object(
-                                        {
-                                          min = optional(string)
-                                          max = optional(string)
-                                        }
-                                      )
-                            )
-                            memory_mib = optional(
-                              object(
-                                {
-                                  min = optional(string, 4)
-                                  max = optional(string)
-                                }
-                              )
-                            )
-                            network_bandwidth_gbps = optional(
-                              object(
-                                {
-                                  min = optional(string)
-                                  max = optional(string)
-                                }
-                              )
-                            )
-                            network_interface_count = optional(
-                              object(
-                                {
-                                  min = optional(string)
-                                  max = optional(string)
-                                }
-                              )
-                            )
-                            on_demand_max_price_percentage_over_lowest_price = optional(string, "20")
-                            require_hibernate_support                        = optional(bool, false)
-                            spot_max_price_percentage_over_lowest_price      = optional(string, "100")
-                            total_local_storage_gb = optional(
-                              object(
-                                {
-                                  min = optional(string)
-                                  max = optional(string)
-                                }
-                              )
-                            )
-                            vcpu_count = optional(
-                              object(
-                                {
-                                  min = optional(string, 2)
-                                  max = optional(string)
-                                }
-                              )
-                            )
-                          }
-                        )
-                      )
-                      instance_type                        = optional(string)
-                      kernel_id                            = optional(string)
-                      key_name                             = optional(string)
-                      license_specification                = optional(
-                        object(
-                          {
-                            license_configuration_arn = optional(string)
-                          }
-                        )
-                      )
-                      maintenance_options = optional(
-                        object(
-                          {
-                            auto_recovery = optional(string, "default")
-                          }
-                        ),
-                        { }
-                      )
-                      metadata_options = optional(
-                        object(
-                          {
-                            http_endpoint               = optional(string, "enabled")
-                            http_tokens                 = optional(string, "required")
-                            http_put_response_hop_limit = optional(string, "1")
-                            http_protocol_ipv6          = optional(string, "disabled")
-                            instance_metadata_tags      = optional(string, "enabled")
-                          }
-                        ),
-                        { }
-                      )
-                      monitoring = optional(
-                        object(
-                          {
-                            enabled = optional(bool, true)
-                          }
-                        ), 
-                        { }
-                      )
-                      name                                 = optional(string)
-                      name_prefix                          = optional(string)
-                      network_interfaces                   = optional(
-                        object(
-                          {
-                            associate_carrier_ip_address = optional(bool)
-                            associate_public_ip_address  = optional(bool, false)
-                            delete_on_termination        = optional(bool, true)
-                            description                  = optional(string)
-                            device_index                 = optional(string, 0)
-                            interface_type               = optional(string)
-                            ipv4_prefix_count            = optional(string)
-                            ipv4_prefixes                = optional(set(string))
-                            ipv6_addresses               = optional(set(string))
-                            ipv6_address_count           = optional(string)
-                            ipv6_prefix_count            = optional(string)
-                            ipv6_prefixes                = optional(set(string))
-                            network_interface_id         = optional(string)
-                            network_card_index           = optional(string, 0)
-                            private_ip_address           = optional(string)
-                            ipv4_address_count           = optional(string) 
-                            ipv4_addresses               = optional(set(string))
-                            security_groups              = optional(set(string))
-                            subnet_id                    = optional(string)
-                          }
-                        )
-                      )
-                      placement                            = optional(
-                        object(
-                          {
-                            affinity                = optional(string)
-                            availability_zone       = optional(string)
-                            group_name              = optional(string)
-                            host_id                 = optional(string)
-                            host_resource_group_arn = optional(string)
-                            spread_domain           = optional(string)
-                            tenancy                 = optional(string, "default")
-                            partition_number        = optional(string)
-                          }
-                        )
-                      )
-                      private_dns_name_options = optional(
-                        object(
-                          {
-                            enable_resource_name_dns_aaaa_record = optional(bool, false)
-                            enable_resource_name_dns_a_record    = optional(bool, true)
-                            hostname_type                        = optional(string, "ip-name")
-                          }
-                        )
-                      )
-                      ram_disk_id              = optional(string)
-                      security_group_names     = optional(set(string))
-                      tag_specifications       = optional(
-                        set(
-                          object(
-                            {
-                              resource_type = optional(string, "instance")
-                              tags          = optional(map(string))
-                            }
-                          )
-                        )
-                      )
-                      tags                     = optional(map(string))
-                      update_default_version   = optional(string)
-                      user_data                = optional(any)
-                      vpc_security_group_ids   = optional(set(string))
-                    }
-                  ), { }
-                )
-                node_group_name_prefix = optional(string)
-                node_role_arn          = optional(string)
-                release_version        = optional(string)
-                remote_access          = optional(
-                  object(
-                    {
-                      ec2_ssh_key               = optional(string)
-                      source_security_group_ids = optional(set(string))
-                    }
-                  )
-                )
-                scaling_config         = optional(
-                  object(
-                    {
-                      desired_size = optional(string, 1)
-                      max_size     = optional(string, 100)
-                      min_size     = optional(string, 1)
-                    }
-                  ),
-                  { }
-                )
-                security_groups = optional( # Security group configuration for the VPC                  
-                  object(
-                    {
-                      egress = optional(             # Egress rule configuration for the security group
-                        list(
-                          object(
-                            {
-                              description      = optional(string)      # Description of the egress rule
-                              from_port        = optional(string)      # Starting port range for the egress rule
-                              to_port          = optional(string)      # Ending port range for the egress rule
-                              protocol         = optional(string)      # Protocol to use for the egress rule
-                              cidr_blocks      = optional(set(string)) # List of CIDR blocks for the egress rule
-                              ipv6_cidr_blocks = optional(set(string)) # List of IPv6 CIDR blocks for the egress rule
-                              prefix_list_ids  = optional(set(string)) # List of prefix list IDs for the egress rule
-                              security_groups  = optional(set(string)) # List of security groups to associate with the egress rule
-                            }
-                          )
-                        )
-                      )
-                      ingress = optional( # Ingress rule configuration for the security group
-                        list(
-                          object(
-                            {
-                              description      = optional(string)      # Description of the ingress rule
-                              from_port        = optional(string)      # Starting port range for the ingress rule
-                              to_port          = optional(string)      # Ending port range for the ingress rule
-                              protocol         = optional(string)      # Protocol to use for the ingress rule
-                              cidr_blocks      = optional(set(string)) # List of CIDR blocks for the ingress rule
-                              ipv6_cidr_blocks = optional(set(string)) # List of IPv6 CIDR blocks for the ingress rule
-                              prefix_list_ids  = optional(set(string)) # List of prefix list IDs for the ingress rule
-                              security_groups  = optional(set(string)) # List of security groups to associate with the ingress rule
-                            }
-                          )
-                        )
-                      )
-                      revoke_rules_on_delete = optional(bool, false)      # If 'true', will revoke all rules when the security group is deleted.  This is normally not needed, however certain AWS services such as Elastic Map Reduce may automatically add required rules to security groups used with the service, and those rules may contain a cyclic dependency that prevent the security groups from being destroyed without removing the dependency first. Default false.
-                      tags                   = optional(map(string))      # Tags for the security group
-                    }
-                  )
-                )
-                subnet_filter = optional(
-                  set(
-                    object(
-                      {
-                        name   = optional(string)
-                        values = optional(set(string))
-                      }
-                    )
-                  )
-                )
-                subnet_ids = optional(set(string))
-                taint = optional(
-                  set(
-                    object(
-                      {
-                        key    = optional(string)
-                        value  = optional(string)
-                        effect = optional(string, "NO_SCHEDULE")
-                      }
-                    )
-                  )
-                )
-                update_config = optional(
-                  object(
-                    {    
-                      max_unavailable            = optional(string)
-                      max_unavailable_percentage = optional(string, 10)
-                    }
-                  )
-                )
-                version = optional(string, "1.27")
-                enable_instance_tags = optional(bool, false)
-                tags    = optional(map(string))
-              }
-            )
-          )
+  description = "EKS clusters keyed by a stable Terraform identifier."
+
+  type = map(object({
+    control_plane = object({
+      name    = string
+      version = optional(string, "1.35")
+
+      role_arn                      = optional(string)
+      role_name                     = optional(string)
+      role_permissions_boundary     = optional(string)
+      role_additional_policy_arns   = optional(map(string), {})
+      enabled_cluster_log_types     = optional(set(string), ["api", "audit", "authenticator", "controllerManager", "scheduler"])
+      bootstrap_self_managed_addons = optional(bool, false)
+      deletion_protection           = optional(bool, false)
+
+      vpc_config = object({
+        subnet_ids              = set(string)
+        security_group_ids      = optional(set(string), [])
+        endpoint_private_access = optional(bool, true)
+        endpoint_public_access  = optional(bool, false)
+        public_access_cidrs     = optional(set(string), [])
+      })
+
+      access_config = optional(object({
+        authentication_mode                         = optional(string, "API_AND_CONFIG_MAP")
+        bootstrap_cluster_creator_admin_permissions = optional(bool, true)
+      }), {})
+
+      auto_mode = optional(object({
+        enabled                          = optional(bool, true)
+        node_pools                       = optional(set(string), ["general-purpose", "system"])
+        node_role_arn                    = optional(string)
+        node_role_name                   = optional(string)
+        node_role_permissions_boundary   = optional(string)
+        node_role_additional_policy_arns = optional(map(string), {})
+      }))
+
+      kubernetes_network_config = optional(object({
+        ip_family         = optional(string, "ipv4")
+        service_ipv4_cidr = optional(string, "172.20.0.0/16")
+        service_ipv6_cidr = optional(string)
+      }), {})
+
+      upgrade_policy = optional(object({
+        support_type = optional(string, "STANDARD")
+      }), {})
+
+      logs = optional(object({
+        retention_in_days = optional(number, 30)
+        kms_key_id        = optional(string)
+      }), {})
+
+      encryption_config = optional(object({
+        enabled                 = optional(bool, true)
+        resources               = optional(set(string), ["secrets"])
+        key_arn                 = optional(string)
+        alias                   = optional(string)
+        description             = optional(string)
+        deletion_window_in_days = optional(number, 30)
+        enable_key_rotation     = optional(bool, true)
+      }), {})
+
+      irsa = optional(object({
+        enabled         = optional(bool, true)
+        client_id_list  = optional(set(string), ["sts.amazonaws.com"])
+        thumbprint_list = optional(set(string), [])
+      }), {})
+
+      addons = optional(map(object({
+        addon_version               = optional(string)
+        configuration_values        = optional(string)
+        preserve                    = optional(bool, true)
+        resolve_conflicts_on_create = optional(string, "OVERWRITE")
+        resolve_conflicts_on_update = optional(string, "OVERWRITE")
+        service_account_role_arn    = optional(string)
+        tags                        = optional(map(string), {})
+      })))
+
+      capabilities = optional(map(object({
+        name                      = optional(string)
+        type                      = string
+        role_arn                  = optional(string)
+        role_name                 = optional(string)
+        role_permissions_boundary = optional(string)
+        role_policy_arns          = optional(map(string), {})
+        role_inline_policy        = optional(string)
+        delete_propagation_policy = optional(string, "RETAIN")
+
+        argo_cd = optional(object({
+          namespace = optional(string)
+          aws_idc = object({
+            idc_instance_arn = string
+            idc_region       = optional(string)
+          })
+          network_access = optional(object({
+            vpce_ids = set(string)
+          }))
+          rbac_role_mappings = optional(map(object({
+            role = string
+            identities = set(object({
+              id   = string
+              type = string
+            }))
+          })), {})
+        }))
+
+        tags = optional(map(string), {})
+      })), {})
+
+      identity_providers = optional(map(object({
+        client_id       = string
+        issuer_url      = string
+        groups_claim    = optional(string)
+        groups_prefix   = optional(string)
+        required_claims = optional(map(string), {})
+        username_claim  = optional(string)
+        username_prefix = optional(string)
+        tags            = optional(map(string), {})
+      })), {})
+
+      access_entries = optional(map(object({
+        principal_arn     = string
+        type              = optional(string, "STANDARD")
+        kubernetes_groups = optional(set(string), [])
+        username          = optional(string)
+        policy_associations = optional(map(object({
+          policy_arn = string
+          access_scope = object({
+            type       = string
+            namespaces = optional(set(string), [])
+          })
+        })), {})
+      })), {})
+
+      pod_identity_associations = optional(map(object({
+        namespace            = string
+        service_account      = string
+        role_arn             = string
+        target_role_arn      = optional(string)
+        disable_session_tags = optional(bool, false)
+        policy               = optional(string)
+        tags                 = optional(map(string), {})
+      })), {})
+
+      tags = optional(map(string), {})
+    })
+
+    node_groups = optional(map(object({
+      name                             = optional(string)
+      ami_type                         = optional(string, "AL2023_x86_64_STANDARD")
+      capacity_type                    = optional(string, "ON_DEMAND")
+      force_update_version             = optional(bool, false)
+      instance_types                   = optional(set(string), ["t3.medium"])
+      labels                           = optional(map(string), {})
+      node_role_arn                    = optional(string)
+      node_role_name                   = optional(string)
+      node_role_permissions_boundary   = optional(string)
+      node_role_additional_policy_arns = optional(map(string), {})
+      release_version                  = optional(string)
+      subnet_ids                       = optional(set(string))
+      tags                             = optional(map(string), {})
+      version                          = optional(string)
+
+      scaling_config = optional(object({
+        desired_size = optional(number, 1)
+        max_size     = optional(number, 3)
+        min_size     = optional(number, 1)
+      }), {})
+
+      update_config = optional(object({
+        max_unavailable            = optional(number)
+        max_unavailable_percentage = optional(number)
+        }), {
+        max_unavailable_percentage = 33
+      })
+
+      node_repair_config = optional(object({
+        enabled = optional(bool, true)
+      }), {})
+
+      taints = optional(map(object({
+        key    = string
+        value  = optional(string)
+        effect = string
+      })), {})
+
+      launch_template = optional(object({
+        image_id    = optional(string)
+        key_name    = optional(string)
+        name_prefix = optional(string)
+        user_data   = optional(string)
+
+        metadata_options = optional(object({
+          http_endpoint               = optional(string, "enabled")
+          http_protocol_ipv6          = optional(string, "disabled")
+          http_put_response_hop_limit = optional(number, 2)
+          http_tokens                 = optional(string, "required")
+          instance_metadata_tags      = optional(string, "disabled")
+        }), {})
+
+        monitoring = optional(object({
+          enabled = optional(bool, false)
+        }), {})
+
+        security_group_ids = optional(set(string), [])
+
+        block_device_mappings = optional(list(object({
+          device_name  = string
+          no_device    = optional(string)
+          virtual_name = optional(string)
+          ebs = optional(object({
+            delete_on_termination = optional(bool, true)
+            encrypted             = optional(bool, true)
+            iops                  = optional(number)
+            kms_key_id            = optional(string)
+            snapshot_id           = optional(string)
+            throughput            = optional(number)
+            volume_size           = optional(number, 20)
+            volume_type           = optional(string, "gp3")
+          }))
+          })), [{
+          device_name = "/dev/xvda"
+          ebs = {
+            delete_on_termination = true
+            encrypted             = true
+            volume_size           = 20
+            volume_type           = "gp3"
+          }
+        }])
+      }), {})
+    })), {})
+  }))
+
+  validation {
+    condition = alltrue([
+      for cluster in values(var.eks_config) :
+      trimspace(cluster.control_plane.name) != "" && length(cluster.control_plane.vpc_config.subnet_ids) >= 2
+    ])
+    error_message = "Each cluster must have a non-empty name and at least two control-plane subnet_ids."
+  }
+
+  validation {
+    condition = alltrue([
+      for cluster in values(var.eks_config) :
+      !cluster.control_plane.vpc_config.endpoint_public_access || (
+        length(cluster.control_plane.vpc_config.public_access_cidrs) > 0 &&
+        !contains(cluster.control_plane.vpc_config.public_access_cidrs, "0.0.0.0/0") &&
+        !contains(cluster.control_plane.vpc_config.public_access_cidrs, "::/0")
+      )
+    ])
+    error_message = "Public endpoints require explicit restricted public_access_cidrs; 0.0.0.0/0 and ::/0 are rejected."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for cluster in values(var.eks_config) : [
+        for node_group in values(cluster.node_groups) :
+        node_group.scaling_config.min_size <= node_group.scaling_config.desired_size &&
+        node_group.scaling_config.desired_size <= node_group.scaling_config.max_size
+      ]
+    ]))
+    error_message = "Each node group must satisfy min_size <= desired_size <= max_size."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for cluster in values(var.eks_config) : [
+        for node_group in values(cluster.node_groups) :
+        (node_group.update_config.max_unavailable == null) != (node_group.update_config.max_unavailable_percentage == null)
+      ]
+    ]))
+    error_message = "Set exactly one of max_unavailable or max_unavailable_percentage for each node group."
+  }
+
+  validation {
+    condition = alltrue([
+      for cluster in values(var.eks_config) :
+      contains(["API", "API_AND_CONFIG_MAP", "CONFIG_MAP"], cluster.control_plane.access_config.authentication_mode)
+    ])
+    error_message = "authentication_mode must be API, API_AND_CONFIG_MAP, or CONFIG_MAP."
+  }
+
+  validation {
+    condition = alltrue([
+      for cluster in values(var.eks_config) :
+      cluster.control_plane.access_config.authentication_mode != "CONFIG_MAP" || length(cluster.control_plane.access_entries) == 0
+    ])
+    error_message = "access_entries require authentication_mode API or API_AND_CONFIG_MAP."
+  }
+
+  validation {
+    condition = alltrue([
+      for cluster in values(var.eks_config) :
+      !try(cluster.control_plane.auto_mode.enabled, false) ||
+      contains(["API", "API_AND_CONFIG_MAP"], cluster.control_plane.access_config.authentication_mode)
+    ])
+    error_message = "EKS Auto Mode requires authentication_mode API or API_AND_CONFIG_MAP."
+  }
+
+  validation {
+    condition = alltrue([
+      for cluster in values(var.eks_config) :
+      !try(cluster.control_plane.auto_mode.enabled, false) || !cluster.control_plane.bootstrap_self_managed_addons
+    ])
+    error_message = "EKS Auto Mode requires bootstrap_self_managed_addons to be false."
+  }
+
+  validation {
+    condition = alltrue([
+      for cluster in values(var.eks_config) : alltrue([
+        for node_pool in try(cluster.control_plane.auto_mode.node_pools, toset([])) :
+        contains(["general-purpose", "system"], node_pool)
+      ])
+    ])
+    error_message = "auto_mode.node_pools can contain only the built-in general-purpose and system pools; create custom NodePool resources outside this module."
+  }
+
+  validation {
+    condition = alltrue([
+      for cluster in values(var.eks_config) :
+      try(cluster.control_plane.auto_mode.node_role_arn, null) == null || (
+        try(cluster.control_plane.auto_mode.node_role_name, null) == null &&
+        try(cluster.control_plane.auto_mode.node_role_permissions_boundary, null) == null &&
+        length(try(cluster.control_plane.auto_mode.node_role_additional_policy_arns, {})) == 0
+      )
+    ])
+    error_message = "Managed Auto Mode node-role settings must be omitted when auto_mode.node_role_arn is supplied."
+  }
+
+  validation {
+    condition = alltrue([
+      for cluster in values(var.eks_config) :
+      try(cluster.control_plane.auto_mode.enabled, true) || (
+        try(cluster.control_plane.auto_mode.node_role_arn, null) == null &&
+        try(cluster.control_plane.auto_mode.node_role_name, null) == null &&
+        try(cluster.control_plane.auto_mode.node_role_permissions_boundary, null) == null &&
+        length(try(cluster.control_plane.auto_mode.node_role_additional_policy_arns, {})) == 0
+      )
+    ])
+    error_message = "Auto Mode node-role settings must be omitted when auto_mode.enabled is false."
+  }
+
+  validation {
+    condition = alltrue([
+      for cluster in values(var.eks_config) :
+      !try(cluster.control_plane.auto_mode.enabled, false) ||
+      length(try(cluster.control_plane.auto_mode.node_pools, toset([]))) > 0 || (
+        try(cluster.control_plane.auto_mode.node_role_arn, null) == null &&
+        try(cluster.control_plane.auto_mode.node_role_name, null) == null &&
+        try(cluster.control_plane.auto_mode.node_role_permissions_boundary, null) == null &&
+        length(try(cluster.control_plane.auto_mode.node_role_additional_policy_arns, {})) == 0
+      )
+    ])
+    error_message = "Auto Mode node-role settings must be omitted when node_pools is empty; custom NodeClasses own their node roles."
+  }
+
+  validation {
+    condition = alltrue([
+      for cluster in values(var.eks_config) :
+      !try(cluster.control_plane.auto_mode.enabled, false) ||
+      length(try(cluster.control_plane.auto_mode.node_pools, toset([]))) == 0 ||
+      try(cluster.control_plane.auto_mode.node_role_arn, null) != null ||
+      length(coalesce(
+        try(cluster.control_plane.auto_mode.node_role_name, null),
+        "${cluster.control_plane.name}-auto-node-role"
+      )) <= 64
+    ])
+    error_message = "Managed Auto Mode node IAM role names must be 64 characters or fewer; set auto_mode.node_role_name explicitly when needed."
+  }
+
+  validation {
+    condition = alltrue([
+      for cluster in values(var.eks_config) :
+      contains(["STANDARD", "EXTENDED"], cluster.control_plane.upgrade_policy.support_type)
+    ])
+    error_message = "upgrade_policy.support_type must be STANDARD or EXTENDED."
+  }
+
+  validation {
+    condition = alltrue([
+      for cluster in values(var.eks_config) :
+      !cluster.control_plane.encryption_config.enabled || (
+        cluster.control_plane.encryption_config.deletion_window_in_days >= 7 &&
+        cluster.control_plane.encryption_config.deletion_window_in_days <= 30
+      )
+    ])
+    error_message = "KMS deletion_window_in_days must be between 7 and 30."
+  }
+
+  validation {
+    condition = alltrue([
+      for cluster in values(var.eks_config) :
+      cluster.control_plane.role_arn != null || length(coalesce(cluster.control_plane.role_name, "${cluster.control_plane.name}-cluster-role")) <= 64
+    ])
+    error_message = "Managed cluster IAM role names must be 64 characters or fewer; set role_name explicitly for long cluster names."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for cluster in values(var.eks_config) : [
+        for node_group_key, node_group in cluster.node_groups :
+        node_group.node_role_arn != null || length(coalesce(node_group.node_role_name, "${cluster.control_plane.name}-${coalesce(node_group.name, node_group_key)}-node-role")) <= 64
+      ]
+    ]))
+    error_message = "Managed node IAM role names must be 64 characters or fewer; set node_role_name explicitly when needed."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for cluster in values(var.eks_config) : [
+        for capability_key, capability in cluster.control_plane.capabilities :
+        contains(["ACK", "ARGOCD", "KRO"], upper(capability.type)) &&
+        length(trimspace(coalesce(capability.name, capability_key))) >= 1 &&
+        length(trimspace(coalesce(capability.name, capability_key))) <= 100 &&
+        can(regex("^[A-Za-z0-9_-]+$", coalesce(capability.name, capability_key)))
+      ]
+    ]))
+    error_message = "Each capability type must be ACK, ARGOCD, or KRO, and its resolved name must contain 1 to 100 alphanumeric, hyphen, or underscore characters."
+  }
+
+  validation {
+    condition = alltrue([
+      for cluster in values(var.eks_config) :
+      length(distinct([
+        for capability in values(cluster.control_plane.capabilities) : upper(capability.type)
+      ])) == length(cluster.control_plane.capabilities)
+    ])
+    error_message = "Each cluster can configure at most one capability of each type."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for cluster in values(var.eks_config) : [
+        for capability in values(cluster.control_plane.capabilities) :
+        upper(capability.delete_propagation_policy) == "RETAIN"
+      ]
+    ]))
+    error_message = "EKS Capabilities currently support only RETAIN as delete_propagation_policy."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for cluster in values(var.eks_config) : [
+        for capability in values(cluster.control_plane.capabilities) :
+        upper(capability.type) == "ARGOCD" ? (
+          capability.argo_cd != null &&
+          trimspace(capability.argo_cd.aws_idc.idc_instance_arn) != "" &&
+          (capability.argo_cd.namespace == null || trimspace(capability.argo_cd.namespace) != "") &&
+          (capability.argo_cd.network_access == null || length(capability.argo_cd.network_access.vpce_ids) > 0) &&
+          length(capability.argo_cd.rbac_role_mappings) > 0 &&
+          alltrue([
+            for mapping in values(capability.argo_cd.rbac_role_mappings) :
+            contains(["ADMIN", "EDITOR", "VIEWER"], upper(mapping.role)) &&
+            length(mapping.identities) > 0 && alltrue([
+              for identity in mapping.identities :
+              trimspace(identity.id) != "" &&
+              contains(["SSO_GROUP", "SSO_USER"], upper(identity.type))
+            ])
+          ])
+        ) : capability.argo_cd == null
+      ]
+    ]))
+    error_message = "ARGOCD requires aws_idc and an ADMIN, EDITOR, or VIEWER mapping to non-empty SSO_GROUP or SSO_USER identities; configured namespace and network_access values cannot be empty, and argo_cd must be omitted for ACK and KRO."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for cluster in values(var.eks_config) : [
+        for capability in values(cluster.control_plane.capabilities) :
+        upper(capability.type) != "ACK" || capability.role_arn != null ||
+        length(capability.role_policy_arns) > 0 || capability.role_inline_policy != null
+      ]
+    ]))
+    error_message = "ACK requires an external role_arn or explicit managed-role permissions through role_policy_arns or role_inline_policy."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for cluster in values(var.eks_config) : [
+        for capability in values(cluster.control_plane.capabilities) :
+        capability.role_arn == null || (
+          capability.role_name == null &&
+          capability.role_permissions_boundary == null &&
+          length(capability.role_policy_arns) == 0 &&
+          capability.role_inline_policy == null
         )
-        control_plane = optional(
-          object(
-            {
-              addons = optional(
-                list(
-                  object(
-                    {
-                      addon_name           = optional(string)
-                      addon_version        = optional(string)
-                      configuration_values = optional(any)
-                      resolve_conflicts    = optional(string, "OVERWRITE") 
-                    }
-                  )
-                ), 
-                [
-                  {
-                    addon_name           = "coredns"
-                    addon_version        = "v1.10.1-eksbuild.1"
-                    configuration_values = "{\"replicaCount\":4,\"resources\":{\"limits\":{\"cpu\":\"100m\",\"memory\":\"150Mi\"},\"requests\":{\"cpu\":\"30m\",\"memory\":\"30Mi\"}}}"
-                    resolve_conflicts    = "OVERWRITE"
-                  }
-                ]
-              )
-              cluster_timeouts = optional(
-                object(
-                  {
-                    create = optional(string)
-                    update = optional(string)
-                    delete = optional(string)
-                  }
-                )
-              )
-              create_before_destroy      = optional(bool, false)
-              enabled_cluster_log_types = optional(set(string), ["api","audit","authenticator","controllerManager","scheduler"])
-              encryption_config = optional(
-                object(
-                  {
-                    provider  = optional(
-                      object(
-                        {
-                          key_arn                           = optional(string)
-                          create                            = optional(bool, true)
-                          kms_key_description               = optional(string)
-                          kms_key_deletion_window_in_days   = optional(string, 7)
-                          enable_kms_key_rotation           = optional(bool, true)
-                          kms_key_enable_default_policy     = optional(bool, false)
-                          kms_key_owners                    = optional(set(string))
-                          kms_key_administrators            = optional(set(string))
-                          kms_key_users                     = optional(set(string))
-                          kms_key_service_users             = optional(set(string))
-                          kms_key_source_policy_documents   = optional(set(string))
-                          kms_key_override_policy_documents = optional(set(string))
-                          kms_key_aliases                   = optional(set(string))
-                        }
-                      )
-                    )
-                    resources = optional(set(string), ["secrets"])
-                  }
-                ), 
-                { }
-              )
-              iam_role = optional(
-                object(
-                  {
-                    override_default_assume_role_policy = optional(bool, false)
-                    assume_role_policy_statements = optional(
-                      set(
-                        object(
-                          {
-                            actions        = optional(set(string))
-                            condition      = optional(
-                              set(
-                                object(    
-                                  {
-                                    test     = optional(string)
-                                    variable = optional(string)
-                                    values   = optional(set(string))
-                                  }
-                                )
-                              )
-                            )
-                            effect         = optional(string, "Deny")
-                            not_actions    = optional(set(string))
-                            not_principals = optional(
-                              set(
-                                object(
-                                  {  
-                                    identifiers = optional(set(string))
-                                    type        = optional(string)  
-                                  }
-                                )
-                              )
-                            )
-                            not_resources  = optional(set(string))
-                            principals     = optional(
-                              set(
-                                object(
-                                  {  
-                                    identifiers = optional(set(string))
-                                    type        = optional(string)
-                                  }
-                                )
-                              )    
-                            )
-                            resources      = optional(set(string))
-                            sid            = optional(string)
-                          }
-                        )
-                      )
-                    )
-                    create                = optional(bool, true)
-                    description           = optional(string)
-                    force_detach_policies = optional(bool, true)
-                    name_prefix           = optional(string)
-                    path                  = optional(string, "/")
-                    permissions_boundary  = optional(string)
-                    policy_attachments    = optional(set(string), ["AmazonEKSClusterPolicy","AmazonEKSServicePolicy"])
-                    role_arn              = optional(string)
-                    tags                  = optional(map(string))
-                  }
-                ),
-                { }
-              )
-              idp_config = optional(
-                object(
-                  {
-                    groups_claim    = optional(string)
-                    groups_prefix   = optional(string)
-                    required_claims = optional(string)
-                    username_claim  = optional(string)
-                    username_prefix = optional(string)
-                  }
-                )
-              )
-              kubernetes_network_config = optional(
-                object(
-                  {
-                    service_ipv4_cidr = optional(string, "172.16.0.0/23")
-                    ip_family         = optional(string, "ipv4")
-                  }
-                )
-              )
-              logs = optional(
-                object(
-                  {
-                    retention_in_days   = optional(string, 90)
-                    tags                = optional(map(string))
-                  }
-                ),
-                { }
-              )
-              name_prefix               = optional(string)
-              name                      = optional(string)
-              override_default_addons   = optional(bool, false)
-              prevent_destroy           = optional(bool, false)
-              role_arn                  = optional(string)
-              vpc_config                = optional(
-                object(
-                  {
-                    endpoint_private_access = optional(bool, true)                      ##
-                    endpoint_public_access  = optional(bool, true)                      ##
-                    public_access_cidrs     = optional(set(string), ["0.0.0.0/0"])      ##
-                    security_group_ids      = optional(set(string))
-                    subnet_filter = optional(
-                      set(
-                        object(
-                          {
-                            name   = optional(string)
-                            values = optional(set(string))
-                          }
-                        )
-                      )
-                    )
-                    subnet_ids      = optional(set(string))
-                    vpc_id          = optional(string)
-                    vpc_filter = optional(
-                      set(
-                        object(
-                          {
-                            name   = optional(string)
-                            values = optional(set(string))
-                          }
-                        )
-                      )
-                    )                
-                  }
-                ), {}
-              )
-              version = optional(string, "1.27")
-              tags    = optional(map(string))
-            }
-          ),
-          { }
-        )
-      }
-    )
-  )
-  default = {}
+      ]
+    ]))
+    error_message = "Managed capability role settings must be omitted when role_arn is supplied."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for cluster in values(var.eks_config) : [
+        for capability_key, capability in cluster.control_plane.capabilities :
+        capability.role_arn != null || length(coalesce(
+          capability.role_name,
+          "${cluster.control_plane.name}-${coalesce(capability.name, capability_key)}-capability-role"
+        )) <= 64
+      ]
+    ]))
+    error_message = "Managed capability IAM role names must be 64 characters or fewer; set role_name explicitly when needed."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for cluster in values(var.eks_config) : [
+        for capability in values(cluster.control_plane.capabilities) :
+        capability.role_inline_policy == null || can(jsondecode(capability.role_inline_policy))
+      ]
+    ]))
+    error_message = "role_inline_policy must contain valid JSON."
+  }
 }

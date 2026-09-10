@@ -1,10 +1,8 @@
-resource "aws_cloudwatch_log_group" "eks-log-group" {
-  for_each = var.eks_config
+resource "aws_cloudwatch_log_group" "cluster" {
+  for_each = local.clusters
 
-  name              = format("/aws/eks/cluster/%s", local.cluster_name[each.key])
-  retention_in_days = each.value["control_plane"]["logs"]["retention_in_days"]
-  tags              = merge(
-    each.value["control_plane"]["tags"],
-    each.value["control_plane"]["logs"]["tags"]
-  )
+  name              = "/aws/eks/${each.value.control_plane.name}/cluster"
+  retention_in_days = each.value.control_plane.logs.retention_in_days
+  kms_key_id        = each.value.control_plane.logs.kms_key_id
+  tags              = local.cluster_tags[each.key]
 }
