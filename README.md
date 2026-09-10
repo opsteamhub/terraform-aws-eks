@@ -1,307 +1,133 @@
-# AWS EKS CLUSTER
+# Terraform AWS EKS module
 
-Módulo Terraform para criação e gerenciamento de clusters Amazon EKS (Elastic Kubernetes Service) com configuração avançada de node groups, addons e segurança.
+Reusable Terraform module for Amazon EKS clusters, EKS Auto Mode, managed node groups, baseline add-ons, EKS Capabilities, IAM, envelope encryption, access entries, IRSA, and EKS Pod Identity.
 
-## Funcionalidades
+The v2 contract is intentionally explicit: the caller supplies subnet IDs and provider configuration, while this module owns the EKS-specific resources. It has no Git or registry module dependencies, so a private cluster with one managed node group can be created from a small configuration.
 
-- ✅ Cluster EKS com configuração completa
-- ✅ Node Groups gerenciados com Auto Scaling
-- ✅ Addons EKS (CoreDNS, VPC CNI, kube-proxy)
-- ✅ Criptografia de dados em repouso com KMS
-- ✅ Logs do cluster no CloudWatch
-- ✅ Launch Templates customizáveis
-- ✅ Configuração de rede avançada
-- ✅ IAM Roles e políticas automáticas
-- ✅ Suporte a Spot Instances
-- ✅ Taints e Labels nos nodes
+> Upgrading from the current `master` implementation is a major migration. Read [Migration to v2](docs/MIGRATION-v2.md) before changing a live state.
 
-## Uso Básico
+## What it manages
+
+- One or more EKS control planes with stable, caller-defined names.
+- Private-only API endpoints by default; public endpoints require restricted CIDRs.
+- Customer-managed KMS encryption for Kubernetes secrets by default.
+- All five control-plane log types and a correctly named CloudWatch log group.
+- `coredns`, `kube-proxy`, and `vpc-cni` add-ons without stale hard-coded versions.
+- Opt-in EKS Auto Mode with AWS-recommended cluster/node IAM, built-in node pools, pure or hybrid operation, and coordinated compute, load-balancing, and block-storage settings.
+- Managed node groups on AL2023 or Bottlerocket with IMDSv2, encrypted gp3 root volumes, and node repair.
+- Cluster and node IAM roles, or caller-supplied external roles.
+- Opt-in managed ACK, Argo CD, and KRO EKS Capabilities with dedicated or external IAM roles.
+- EKS Access API entries and scoped access-policy associations.
+- IRSA on every supported Kubernetes version and EKS Pod Identity on demand.
+- Organizational tags on every taggable resource.
+
+The module deliberately does not discover or create a VPC, subnets, NAT, route tables, security boundaries outside EKS, Kubernetes workloads, or a remote state backend. Pass outputs from a VPC stack directly to `subnet_ids`.
+
+## Compatibility
+
+| Component | Supported range |
+| --- | --- |
+| Terraform | `>= 1.7.0, < 2.0.0` |
+| AWS provider | `>= 6.25, < 7.0` |
+| TLS provider | `>= 4.0, < 5.0` |
+| Default Kubernetes version | `1.35` |
+| Default managed-node AMI | `AL2023_x86_64_STANDARD` |
+
+The default Kubernetes version is a convenience, not an evergreen guarantee. Pin it explicitly in production and review the [Amazon EKS version lifecycle](https://docs.aws.amazon.com/eks/latest/userguide/kubernetes-versions.html) before upgrades.
+
+## Quick start
 
 ```hcl
-module "eks_cluster" {
-  source = "github.com/opsteamhub/terraform-aws-eks"
+module "eks" {
+  source = "git::https://github.com/opsteamhub/terraform-aws-eks.git?ref=<released-version>"
+
+  default_tags = {
+    Environment = "development"
+    Owner       = "platform"
+    Project     = "container-platform"
+  }
 
   eks_config = {
-    "production" = {
+    primary = {
       control_plane = {
-        name    = "my-eks-cluster"
-        version = "1.27"
-        
+        name = "development-eks"
         vpc_config = {
-          vpc_id                  = "vpc-12345678"
-          subnet_ids              = ["subnet-12345", "subnet-67890"]
-          endpoint_private_access = true
-          endpoint_public_access  = true
-          public_access_cidrs     = ["10.0.0.0/8"]
-        }
-        
-        enabled_cluster_log_types = ["api", "audit", "authenticator"]
-        
-        encryption_config = {
-          resources = ["secrets"]
-          provider = {
-            create = true
-            kms_key_description = "EKS cluster encryption key"
-          }
+          subnet_ids = module.vpc.private_subnet_ids
         }
       }
-      
+
       node_groups = {
-        "workers" = {
-          instance_types = ["t3.medium", "t3.large"]
-          capacity_type  = "ON_DEMAND"
-          
-          scaling_config = {
-            desired_size = 2
-            min_size     = 1
-            max_size     = 10
-          }
-          
-          subnet_ids = ["subnet-12345", "subnet-67890"]
-        }
+        system = {}
       }
     }
   }
 }
 ```
 
-## Configuração de Rede
+The consumer must configure the AWS provider and pass at least two suitable subnet IDs. Do not consume an unreviewed branch or an unpinned `master` reference in production.
 
-### Tags Recomendadas nas Subnets
+For a pure Auto Mode cluster, replace `node_groups` with `control_plane.auto_mode = {}`. The module then creates the default `system` and `general-purpose` pools and their minimal node role, while AWS supplies core networking, DNS, load-balancing, storage, and Pod Identity components. See the [Auto Mode example](examples/auto-mode) and [configuration reference](docs/CONFIGURATION.md#eks-auto-mode).
 
-Para os **load balancers** do Kubernetes funcionarem automaticamente, as subnets devem ter tags específicas:
+## Secure defaults and operational choices
 
-```hcl
-# Subnets privadas (para node groups)
-resource "aws_subnet" "private" {
-  # ... outras configurações
-  
-  tags = {
-    "kubernetes.io/role/internal-elb"        = "1"
-    "kubernetes.io/cluster/my-cluster-name"  = "shared"  # ou "owned"
-  }
-}
+| Behavior | Default | How to change it |
+| --- | --- | --- |
+| EKS API | Private enabled, public disabled | Set `endpoint_public_access = true` and explicit restricted `public_access_cidrs` |
+| Secret encryption | New rotating customer-managed KMS key | Pass `encryption_config.key_arn` or set `encryption_config.enabled = false` |
+| Control-plane logs | All five types, retained 30 days | Change `enabled_cluster_log_types` or `logs` |
+| Cluster access | `API_AND_CONFIG_MAP`, creator admin enabled | Configure `access_config` and `access_entries` |
+| Add-ons | CoreDNS, kube-proxy, VPC CNI for standard/hybrid clusters; none for pure Auto Mode | Override the `addons` map; omit hard-coded versions to let EKS select compatible builds |
+| EKS Auto Mode | Disabled | Set `auto_mode = {}`; add `node_groups` for coexistence or set `node_pools = []` for caller-managed NodePool/NodeClass resources |
+| EKS Capabilities | Disabled | Add `capabilities` entries for ACK, Argo CD, or KRO; only one of each type per cluster |
+| IRSA | Enabled | Set `irsa.enabled = false` |
+| Nodes | AL2023, IMDSv2 required, encrypted 20 GiB gp3, repair enabled | Configure each node group's `launch_template`, `ami_type`, and `node_repair_config` |
+| Desired size | Ignored after creation | Designed for Cluster Autoscaler/Karpenter ownership; change min/max in Terraform |
 
-# Subnets públicas (para load balancers)
-resource "aws_subnet" "public" {
-  # ... outras configurações
-  
-  tags = {
-    "kubernetes.io/role/elb"                 = "1"
-    "kubernetes.io/cluster/my-cluster-name"  = "shared"  # ou "owned"
-  }
-}
-```
+Creating a KMS key, CloudWatch Logs, the EKS control plane, EC2 nodes, EKS Auto Mode, EKS Capabilities, and optional public IPv4 traffic can incur AWS charges. [Auto Mode pricing](https://aws.amazon.com/eks/pricing/) adds a management charge to its EC2, EBS, and load-balancer resources. Each active capability is billed hourly, and resources managed through ACK, Argo CD, or KRO may add their own charges. A private endpoint also requires a network path from operators and automation to the VPC.
 
-## Configuração Avançada
+## Documentation
 
-### Control Plane
-
-```hcl
-control_plane = {
-  name    = "production-eks"
-  version = "1.27"
-  
-  # Configuração de rede
-  vpc_config = {
-    vpc_id                  = "vpc-12345678"
-    subnet_ids              = ["subnet-private-1", "subnet-private-2"]
-    endpoint_private_access = true
-    endpoint_public_access  = false
-    security_group_ids      = ["sg-12345678"]
-  }
-  
-  # Logs do cluster
-  enabled_cluster_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
-  logs = {
-    retention_in_days = 30
-  }
-  
-  # Criptografia
-  encryption_config = {
-    resources = ["secrets"]
-    provider = {
-      create                  = true
-      kms_key_description     = "EKS encryption key"
-      enable_kms_key_rotation = true
-    }
-  }
-  
-  # Addons
-  addons = [
-    {
-      addon_name    = "vpc-cni"
-      addon_version = "v1.12.6-eksbuild.2"
-      resolve_conflicts = "OVERWRITE"
-    },
-    {
-      addon_name    = "coredns"
-      addon_version = "v1.10.1-eksbuild.1"
-      configuration_values = jsonencode({
-        replicaCount = 4
-        resources = {
-          limits = {
-            cpu    = "100m"
-            memory = "150Mi"
-          }
-          requests = {
-            cpu    = "30m"
-            memory = "30Mi"
-          }
-        }
-      })
-    }
-  ]
-}
-```
-
-### Node Groups
-
-```hcl
-node_groups = {
-  "system" = {
-    instance_types = ["t3.medium"]
-    capacity_type  = "ON_DEMAND"
-    
-    scaling_config = {
-      desired_size = 2
-      min_size     = 2
-      max_size     = 4
-    }
-    
-    labels = {
-      "node-type" = "system"
-      "workload"  = "system-pods"
-    }
-    
-    taint = [
-      {
-        key    = "node-type"
-        value  = "system"
-        effect = "NO_SCHEDULE"
-      }
-    ]
-  }
-  
-  "workers" = {
-    instance_types = ["t3.large", "t3.xlarge"]
-    capacity_type  = "SPOT"
-    
-    scaling_config = {
-      desired_size = 3
-      min_size     = 1
-      max_size     = 20
-    }
-    
-    # Launch Template customizado
-    launch_template = {
-      instance_requirements = {
-        memory_mib = {
-          min = 8192
-        }
-        vcpu_count = {
-          min = 2
-          max = 8
-        }
-        instance_generations = ["current"]
-      }
-      
-      block_device_mappings = [
-        {
-          device_name = "/dev/xvda"
-          ebs = {
-            volume_size           = 100
-            volume_type           = "gp3"
-            encrypted             = true
-            delete_on_termination = true
-          }
-        }
-      ]
-      
-      metadata_options = {
-        http_endpoint = "enabled"
-        http_tokens   = "required"
-        http_put_response_hop_limit = 2
-      }
-    }
-  }
-}
-```
-
-## Variáveis Principais
-
-| Nome | Tipo | Descrição | Obrigatório |
-|------|------|-----------|-------------|
-| `eks_config` | map(object) | Configuração completa do cluster EKS | ✅ |
-
-### Estrutura do `eks_config`
-
-#### Control Plane
-- `name` - Nome do cluster
-- `version` - Versão do Kubernetes
-- `vpc_config` - Configuração de rede
-- `encryption_config` - Configuração de criptografia
-- `addons` - Lista de addons do EKS
-- `logs` - Configuração de logs
-
-#### Node Groups
-- `instance_types` - Tipos de instância EC2
-- `capacity_type` - ON_DEMAND ou SPOT
-- `scaling_config` - Configuração de Auto Scaling
-- `launch_template` - Template de lançamento customizado
-- `labels` - Labels do Kubernetes
-- `taint` - Taints do Kubernetes
+- [Configuration reference](docs/CONFIGURATION.md)
+- [Architecture and ownership boundaries](docs/ARCHITECTURE.md)
+- [Migration to v2](docs/MIGRATION-v2.md)
+- [Gap analysis and future scope](docs/GAP_ANALYSIS.md)
+- [Basic example](examples/basic)
+- [Complete example](examples/complete)
+- [Bottlerocket example](examples/bottlerocket)
+- [EKS Capabilities example](examples/capabilities)
+- [EKS Auto Mode example](examples/auto-mode)
+- [Repository instructions for humans and agents](AGENTS.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
 
 ## Outputs
 
-- `cluster_id` - ID do cluster EKS
-- `cluster_arn` - ARN do cluster EKS
-- `cluster_endpoint` - Endpoint do cluster
-- `cluster_security_group_id` - Security Group do cluster
-- `node_groups` - Informações dos node groups
-- `cluster_certificate_authority_data` - Certificado CA do cluster
+The main outputs are `clusters`, `cluster_names`, `auto_mode`, `auto_mode_node_role_arns`, `node_groups`, `launch_templates`, `capabilities`, `capability_role_arns`, `kms_key_arns`, `oidc_provider_arns`, `pod_identity_association_arns`, `cluster_role_arns`, and `node_role_arns`. Certificate authority data is exposed separately as the sensitive `cluster_certificate_authority_data` output.
 
-## Pré-requisitos
+`eks_clusters_name` remains as a deprecated alias for `cluster_names` during the v2 transition.
 
-1. **VPC configurada** com subnets públicas e privadas
-2. **Tags nas subnets** (opcionais, mas recomendadas para load balancers):
-   ```
-   # Para subnets privadas (internal load balancers)
-   "kubernetes.io/role/internal-elb" = "1"
-   "kubernetes.io/cluster/CLUSTER_NAME" = "shared"
-   
-   # Para subnets públicas (external load balancers)
-   "kubernetes.io/role/elb" = "1"
-   "kubernetes.io/cluster/CLUSTER_NAME" = "shared"
-   ```
-3. **Terraform** >= 1.0
-4. **Provider AWS** >= 5.0
-5. **Permissões IAM** adequadas
+## Verification
 
-## Exemplos
+The test suite uses mocked providers and requires no AWS credentials:
 
-Veja a pasta `test/` para exemplos completos de uso:
+```bash
+terraform fmt -check -recursive
+terraform init -backend=false -input=false
+terraform validate
+terraform test -test-directory=testing
 
-- **basic-cluster.tf** - Cluster básico com node group
-- **production-ready.tf** - Configuração para produção
-- **spot-instances.tf** - Usando Spot Instances
-- **multi-nodegroup.tf** - Múltiplos node groups
+terraform -chdir=examples/basic init -backend=false -input=false
+terraform -chdir=examples/basic validate
+terraform -chdir=examples/complete init -backend=false -input=false
+terraform -chdir=examples/complete validate
+terraform -chdir=examples/bottlerocket init -backend=false -input=false
+terraform -chdir=examples/bottlerocket validate
+terraform -chdir=examples/capabilities init -backend=false -input=false
+terraform -chdir=examples/capabilities validate
+terraform -chdir=examples/auto-mode init -backend=false -input=false
+terraform -chdir=examples/auto-mode validate
+```
 
-## Segurança
+Mocked tests validate contracts and the Terraform graph; they do not replace a reviewed plan and a controlled apply in a disposable AWS sandbox before a major release.
 
-- Criptografia de dados em repouso habilitada por padrão
-- Logs de auditoria configurados
-- Security Groups restritivos
-- IAM Roles com princípio de menor privilégio
-- Metadata service v2 obrigatório
-
-## Monitoramento
-
-- Logs do cluster enviados para CloudWatch
-- Métricas de node groups
-- Integração com AWS X-Ray
-- Suporte a Prometheus/Grafana
-
-## Licença
-
-MIT License
+A baseline AWS Dev smoke on 2026-08-17 created EKS 1.35 with two Ready AL2023 managed nodes, healthy core add-ons, Pod Identity, and Karpenter, then completed a clean Terraform destroy. AL2023 and Bottlerocket Karpenter manifests also passed server-side dry-run. Live Auto Mode, EKS Capabilities, Bottlerocket node joins, private-only endpoint access, workload migration, and disruption behavior still require dedicated sandbox gates.
