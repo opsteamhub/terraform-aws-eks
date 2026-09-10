@@ -42,6 +42,12 @@ the release signal. Release Please opens a normal, non-draft release pull reques
 updates `CHANGELOG.md`, and creates the tag and GitHub Release only after that pull
 request is merged.
 
+For a one-time correction to a generated release version, merge a dedicated
+Conventional Commit with a `Release-As: x.y.z` footer. Keep the override in the
+commit only; do not persist it in `release-please-config.json`. After Release
+Please updates the existing release pull request, verify its title, manifest,
+changelog, and validation checks before merging it.
+
 ## Repository setup
 
 The repository must allow GitHub Actions to write contents and pull requests. Add a
