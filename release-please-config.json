@@ -1,0 +1,14 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/v17.11.1/schemas/config.json",
+  "bootstrap-sha": "707931d7a4fbcfcdb1362211ef2da9b9896150fa",
+  "draft-pull-request": false,
+  "include-component-in-tag": false,
+  "include-v-in-tag": true,
+  "pull-request-title-pattern": "chore(release): release ${version}",
+  "release-type": "terraform-module",
+  "packages": {
+    ".": {
+      "component": "terraform-aws-eks"
+    }
+  }
+}
