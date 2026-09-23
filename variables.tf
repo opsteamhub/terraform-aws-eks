@@ -457,20 +457,21 @@ variable "eks_config" {
       for cluster in values(var.eks_config) : [
         for capability in values(cluster.control_plane.capabilities) :
         upper(capability.type) == "ARGOCD" ? (
-          capability.argo_cd != null &&
-          trimspace(capability.argo_cd.aws_idc.idc_instance_arn) != "" &&
-          (capability.argo_cd.namespace == null || trimspace(capability.argo_cd.namespace) != "") &&
-          (capability.argo_cd.network_access == null || length(capability.argo_cd.network_access.vpce_ids) > 0) &&
-          length(capability.argo_cd.rbac_role_mappings) > 0 &&
-          alltrue([
-            for mapping in values(capability.argo_cd.rbac_role_mappings) :
-            contains(["ADMIN", "EDITOR", "VIEWER"], upper(mapping.role)) &&
-            length(mapping.identities) > 0 && alltrue([
-              for identity in mapping.identities :
-              trimspace(identity.id) != "" &&
-              contains(["SSO_GROUP", "SSO_USER"], upper(identity.type))
+          capability.argo_cd == null ? false : (
+            trimspace(capability.argo_cd.aws_idc.idc_instance_arn) != "" &&
+            (capability.argo_cd.namespace == null ? true : trimspace(capability.argo_cd.namespace) != "") &&
+            (capability.argo_cd.network_access == null ? true : length(capability.argo_cd.network_access.vpce_ids) > 0) &&
+            length(capability.argo_cd.rbac_role_mappings) > 0 &&
+            alltrue([
+              for mapping in values(capability.argo_cd.rbac_role_mappings) :
+              contains(["ADMIN", "EDITOR", "VIEWER"], upper(mapping.role)) &&
+              length(mapping.identities) > 0 && alltrue([
+                for identity in mapping.identities :
+                trimspace(identity.id) != "" &&
+                contains(["SSO_GROUP", "SSO_USER"], upper(identity.type))
+              ])
             ])
-          ])
+          )
         ) : capability.argo_cd == null
       ]
     ]))

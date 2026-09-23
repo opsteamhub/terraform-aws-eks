@@ -982,3 +982,103 @@ run "rejects_missing_required_tags" {
 
   expect_failures = [var.default_tags]
 }
+
+run "accepts_explicit_argocd_optional_fields" {
+  command = plan
+  variables {
+    default_tags = { Environment = "test", Owner = "platform", Project = "eks-module" }
+    eks_config = {
+      argocd = {
+        control_plane = {
+          name       = "argocd-cluster"
+          vpc_config = { subnet_ids = ["subnet-0123456789abcdef0", "subnet-0123456789abcdef1"] }
+          irsa       = { enabled = false }
+          capabilities = {
+            argocd = {
+              type = "ARGOCD"
+              argo_cd = {
+                namespace      = "argocd"
+                network_access = { vpce_ids = ["vpce-0123456789abcdef0"] }
+                aws_idc        = { idc_instance_arn = "arn:aws:sso:::instance/ssoins-0123456789abcdef" }
+                rbac_role_mappings = {
+                  administrators = {
+                    role       = "ADMIN"
+                    identities = [{ id = "1234567890-abcdef", type = "SSO_GROUP" }]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  assert {
+    condition     = aws_eks_capability.this["argocd||argocd"].configuration[0].argo_cd[0].namespace == "argocd"
+    error_message = "An explicit Argo CD namespace must be preserved."
+  }
+}
+
+run "rejects_blank_argocd_namespace" {
+  command = plan
+  variables {
+    default_tags = { Environment = "test", Owner = "platform", Project = "eks-module" }
+    eks_config = {
+      argocd = {
+        control_plane = {
+          name       = "argocd-cluster"
+          vpc_config = { subnet_ids = ["subnet-0123456789abcdef0", "subnet-0123456789abcdef1"] }
+          irsa       = { enabled = false }
+          capabilities = {
+            argocd = {
+              type = "ARGOCD"
+              argo_cd = {
+                namespace = "   "
+                aws_idc   = { idc_instance_arn = "arn:aws:sso:::instance/ssoins-0123456789abcdef" }
+                rbac_role_mappings = {
+                  administrators = {
+                    role       = "ADMIN"
+                    identities = [{ id = "1234567890-abcdef", type = "SSO_GROUP" }]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  expect_failures = [var.eks_config]
+}
+
+run "rejects_empty_argocd_network_access" {
+  command = plan
+  variables {
+    default_tags = { Environment = "test", Owner = "platform", Project = "eks-module" }
+    eks_config = {
+      argocd = {
+        control_plane = {
+          name       = "argocd-cluster"
+          vpc_config = { subnet_ids = ["subnet-0123456789abcdef0", "subnet-0123456789abcdef1"] }
+          irsa       = { enabled = false }
+          capabilities = {
+            argocd = {
+              type = "ARGOCD"
+              argo_cd = {
+                network_access = { vpce_ids = [] }
+                aws_idc        = { idc_instance_arn = "arn:aws:sso:::instance/ssoins-0123456789abcdef" }
+                rbac_role_mappings = {
+                  administrators = {
+                    role       = "ADMIN"
+                    identities = [{ id = "1234567890-abcdef", type = "SSO_GROUP" }]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  expect_failures = [var.eks_config]
+}
